@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PollaMund - La mejor polla mundialista</title>
+    <meta name="description"
+        content="Organiza tu polla del mundial de forma fácil, rápida y divertida. ¡La mejor experiencia para ti y tus amigos!">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <!-- Profile Selection Screen -->
+    <div id="profile-selection" class="profile-overlay">
+        <div class="profile-container">
+            <h2 id="title-profiles">Polla Mundialista 2026</h2>
+            <p id="title-subtitle">¿Quién está jugando?</p>
+
+            <div id="profiles-list" class="profile-grid">
+                <!-- Los perfiles se cargarán dinámicamente aquí -->
+                <p style="color: var(--text-muted);">Cargando participantes...</p>
+            </div>
+            <button class="btn-secondary" style="margin-top: 3rem;" onclick="goToAdmin()">Acceso Administrador</button>
+        </div>
+    </div>
+
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <div id="main-content" class="hidden">
+        <div class="greeting-wrapper">
+            <h1 id="user-greeting">Hola, Invitado</h1>
+            <p id="user-points">0 Puntos</p>
+            <p>Has ingresado a PollaMund</p>
+            <button id="change-profile-btn" class="btn-secondary" onclick="location.reload()"
+                style="margin-top: 1rem;">Cambiar Perfil</button>
+        </div>
+
+        <section id="prediction-screen">
+            <div class="section-header">
+                <h2>Tus Predicciones</h2>
+                <p>Completa tus marcadores para cada partido.</p>
+            </div>
+            <div id="match-list" class="match-list">
+                <!-- Los partidos se cargarán aquí -->
+                <p>Cargando partidos...</p>
+            </div>
+        </section>
+
+        <section id="leaderboard-screen" class="hidden">
+            <div class="section-header">
+                <h2>Tabla Clasificatoria</h2>
+                <p>Ranking de los participantes.</p>
+            </div>
+            <table class="leaderboard-table">
+                <thead>
+                    <tr>
+                        <th class="rank-col">Pos</th>
+                        <th class="name-col">Participante</th>
+                        <th class="points-col">Puntos</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-body">
+                    <!-- Filas dinámicas -->
+                </tbody>
+            </table>
+            <button class="btn-secondary" onclick="toggleView('prediction')"
+                style="margin-top: 2rem; width: 100%;">Modificar mis Predicciones</button>
+        </section>
+
+        <div class="floating-nav" id="nav-controls">
+            <button class="btn-float" onclick="window.scrollTo({top: 0, behavior: 'smooth'})"
+                title="Ir arriba">▲</button>
+            <button class="btn-float" onclick="window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'})"
+                title="Ir abajo">▼</button>
+        </div>
+
+        <div class="save-bar" id="save-bar">
+            <button id="save-btn" class="btn-primary btn-large">Guardar Todas mis Predicciones</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+        import { getFirestore, collection, query, where, getDocs, orderBy, doc, setDoc, serverTimestamp, limit } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBhREGVAE9ReZPWPfWdt30rAzjEGe_UrsM",
+            authDomain: "results-9212d.firebaseapp.com",
+            projectId: "results-9212d",
+            storageBucket: "results-9212d.firebasestorage.app",
+            messagingSenderId: "257311778953",
+            appId: "1:257311778953:web:87665d0c45d28fd232fe58"
+        };
+
+        const teamTranslations = {
+            "Mexico": "México", "South Africa": "Sudáfrica", "South Korea": "Corea del Sur",
+            "Czech Republic": "República Checa", "Canada": "Canadá", "Bosnia-Herzegovina": "Bosnia y Herz.",
+            "USA": "EE. UU.", "Paraguay": "Paraguay", "Qatar": "Catar", "Switzerland": "Suiza",
+            "Brazil": "Brasil", "Morocco": "Marruecos", "Haiti": "Haití", "Scotland": "Escocia",
+            "Australia": "Australia", "Turkey": "Turquía", "Germany": "Alemania", "Curaçao": "Curazao",
+            "Netherlands": "Países Bajos", "Japan": "Japón", "Ivory Coast": "Costa de Marfil",
+            "Ecuador": "Ecuador", "Sweden": "Suecia", "Tunisia": "Túnez", "Spain": "España",
+            "Cape Verde": "Cabo Verde", "Belgium": "Bélgica", "Egypt": "Egipto",
+            "Saudi Arabia": "Arabia Saudita", "Uruguay": "Uruguay", "Iran": "Irán",
+            "New Zealand": "Nueva Zelanda", "France": "Francia", "Senegal": "Senegal",
+            "Iraq": "Irak", "Norway": "Noruega", "Argentina": "Argentina", "Algeria": "Argelia",
+            "Austria": "Austria", "Jordan": "Jordania", "Portugal": "Portugal",
+            "DR Congo": "RD Congo", "England": "Inglaterra", "Croatia": "Croacia",
+            "Ghana": "Ghana", "Panama": "Panamá", "Uzbekistan": "Uzbekistán", "Colombia": "Colombia"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        let currentUser = null;
+
+        function translateTeam(name) {
+            return teamTranslations[name] || name;
+        }
+
+        const flagMapping = {
+            "Mexico": "mx", "South Africa": "za", "South Korea": "kr", "Czech Republic": "cz",
+            "Canada": "ca", "Bosnia-Herzegovina": "ba", "USA": "us", "Paraguay": "py",
+            "Qatar": "qa", "Switzerland": "ch", "Brazil": "br", "Morocco": "ma",
+            "Haiti": "ht", "Scotland": "gb-sct", "Australia": "au", "Turkey": "tr",
+            "Germany": "de", "Curaçao": "cw", "Netherlands": "nl", "Japan": "jp",
+            "Ivory Coast": "ci", "Ecuador": "ec", "Sweden": "se", "Tunisia": "tn",
+            "Spain": "es", "Cape Verde": "cv", "Belgium": "be", "Egypt": "eg",
+            "Saudi Arabia": "sa", "Uruguay": "uy", "Iran": "ir", "New Zealand": "nz",
+            "France": "fr", "Senegal": "sn", "Iraq": "iq", "Norway": "no",
+            "Argentina": "ar", "Algeria": "dz", "Austria": "at", "Jordan": "jo",
+            "Portugal": "pt", "DR Congo": "cd", "England": "gb-eng", "Croatia": "hr",
+            "Ghana": "gh", "Panama": "pa", "Uzbekistan": "uz", "Colombia": "co"
+        };
+
+        function getFlagUrl(teamName) {
+            const code = flagMapping[teamName] || "flag_nd";
+            return `Pollamundial_files/${code}.png`;
+        }
+
+        // Function to load profiles
+        async function loadProfiles() {
+            const profilesContainer = document.getElementById('profiles-list');
+            try {
+                const q = query(collection(db, "usuarios"), orderBy("nombre", "asc"));
+                const querySnapshot = await getDocs(q);
+                profilesContainer.innerHTML = '';
+                querySnapshot.forEach((doc) => {
+                    const user = doc.data();
+                    profilesContainer.innerHTML += `
+                        <div class="profile-item" onclick="selectProfile('${user.nombre}')">
+                            <div class="avatar">${user.nombre.charAt(0).toUpperCase()}</div>
+                            <span>${user.nombre}</span>
+                        </div>`;
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        // Function to change score locally
+        window.changeScore = function (matchId, team, delta) {
+            const label = document.getElementById(`score-${team}-${matchId}`);
+            let currentStr = label.innerText;
+            
+            let current;
+            if (currentStr === "-") {
+                // First interaction sets it to 0
+                current = 0;
+            } else {
+                current = parseInt(currentStr);
+                current = Math.max(0, current + delta);
+            }
+            
+            label.innerText = current;
+            label.classList.add('pulse');
+            setTimeout(() => label.classList.remove('pulse'), 200);
+        };
+
+        // Function to load matches and existing predictions
+        async function loadMatchesForUser(userName) {
+            const matchList = document.getElementById('match-list');
+            matchList.innerHTML = '<p>Cargando partidos...</p>';
+
+            try {
+                // Fetch ALL matches
+                const qMatches = query(collection(db, "partidos"), orderBy("fecha", "asc"));
+                const snapMatches = await getDocs(qMatches);
+
+                // Fetch existing predictions for this user
+                const qPreds = query(collection(db, "predicciones"), where("usuario", "==", userName));
+                const snapPreds = await getDocs(qPreds);
+                const predsMap = {};
+                snapPreds.forEach(d => {
+                    const p = d.data();
+                    predsMap[p.idPartido] = p;
+                });
+
+                matchList.innerHTML = '';
+                snapMatches.forEach(docSnap => {
+                    const match = docSnap.data();
+                    const pred = predsMap[match.idEvent] || {};
+                    const date = match.fecha.toDate().toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+                    
+                    const scoreLocal = pred.goles_local !== undefined ? pred.goles_local : "-";
+                    const scoreVisitante = pred.goles_visitante !== undefined ? pred.goles_visitante : "-";
+
+                    matchList.innerHTML += `
+                        <div class="match-card" data-id="${match.idEvent}">
+                            <div class="match-info">
+                                <span>${match.ronda}</span>
+                                <span>${date}</span>
+                            </div>
+                            <div class="match-body">
+                                <div class="match-teams">
+                                    <div class="team" data-team="local">
+                                        <img src="${getFlagUrl(match.local)}" class="flag" onerror="this.src='Pollamundial_files/flag_nd.png'" alt="${match.local}">
+                                        <span>${translateTeam(match.local)}</span>
+                                        <div class="stepper">
+                                            <span class="score-label" id="score-local-${match.idEvent}">${scoreLocal}</span>
+                                            <div class="stepper-btns">
+                                                <button class="btn-step" onclick="changeScore('${match.idEvent}', 'local', -1)">-</button>
+                                                <button class="btn-step" onclick="changeScore('${match.idEvent}', 'local', 1)">+</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="vs-badge">VS</div>
+
+                                    <div class="team" data-team="visitante">
+                                        <img src="${getFlagUrl(match.visitante)}" class="flag" onerror="this.src='Pollamundial_files/flag_nd.png'" alt="${match.visitante}">
+                                        <span>${translateTeam(match.visitante)}</span>
+                                        <div class="stepper">
+                                            <span class="score-label" id="score-visitante-${match.idEvent}">${scoreVisitante}</span>
+                                            <div class="stepper-btns">
+                                                <button class="btn-step" onclick="changeScore('${match.idEvent}', 'visitante', -1)">-</button>
+                                                <button class="btn-step" onclick="changeScore('${match.idEvent}', 'visitante', 1)">+</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        // Function to toggle between views
+        window.toggleView = function (view) {
+            const predScreen = document.getElementById('prediction-screen');
+            const leadScreen = document.getElementById('leaderboard-screen');
+            const saveBar = document.getElementById('save-bar');
+            const navControls = document.getElementById('nav-controls');
+            const changeProfileBtn = document.getElementById('change-profile-btn');
+
+            if (view === 'leaderboard') {
+                predScreen.classList.add('hidden');
+                leadScreen.classList.remove('hidden');
+                saveBar.classList.add('hidden');
+                navControls.classList.add('hidden');
+                changeProfileBtn.classList.add('hidden');
+                showLeaderboard();
+            } else {
+                predScreen.classList.remove('hidden');
+                leadScreen.classList.add('hidden');
+                saveBar.classList.remove('hidden');
+                navControls.classList.remove('hidden');
+                changeProfileBtn.classList.remove('hidden');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        };
+
+        // Function to fetch and display leaderboard
+        async function showLeaderboard() {
+            const body = document.getElementById('leaderboard-body');
+            body.innerHTML = '<tr><td colspan="3" style="text-align:center">Cargando ranking...</td></tr>';
+
+            try {
+                const q = query(collection(db, "usuarios"), orderBy("puntos", "desc"));
+                const snap = await getDocs(q);
+                body.innerHTML = '';
+
+                let rank = 1;
+                snap.forEach(docSnap => {
+                    const user = docSnap.data();
+                    let rankIcon = rank;
+                    if (rank === 1) rankIcon = '<span class="rank-1">🥇</span>';
+                    if (rank === 2) rankIcon = '<span class="rank-2">🥈</span>';
+                    if (rank === 3) rankIcon = '<span class="rank-3">🥉</span>';
+
+                    body.innerHTML += `
+                        <tr>
+                            <td class="rank-col">${rankIcon}</td>
+                            <td class="name-col">${user.nombre}</td>
+                            <td class="points-col">${user.puntos || 0} pts</td>
+                        </tr>
+                    `;
+                    rank++;
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        // Save functionality
+        document.getElementById('save-btn').onclick = async () => {
+            const btn = document.getElementById('save-btn');
+            const originalText = btn.innerText;
+            btn.innerText = "Guardando...";
+            btn.disabled = true;
+
+            try {
+                const cards = document.querySelectorAll('.match-card');
+                for (const card of cards) {
+                    const matchId = card.dataset.id;
+                    const goalsLocal = document.getElementById(`score-local-${matchId}`).innerText;
+                    const goalsAway = document.getElementById(`score-visitante-${matchId}`).innerText;
+
+                    const docId = `${currentUser}_${matchId}`;
+                    await setDoc(doc(db, "predicciones", docId), {
+                        usuario: currentUser,
+                        idPartido: matchId,
+                        goles_local: parseInt(goalsLocal),
+                        goles_visitante: parseInt(goalsAway),
+                        fecha_apuesta: serverTimestamp()
+                    });
+                }
+
+                btn.innerText = "¡Guardado con éxito! ✅";
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                    toggleView('leaderboard');
+                }, 1500);
+            } catch (e) {
+                console.error(e);
+                btn.innerText = "Error al guardar ❌";
+                btn.disabled = false;
+            }
+        };
+
+        window.goToAdmin = function () {
+            const pass = prompt("Ingresa la contraseña de administrador:");
+            if (pass === "ad1234") {
+                window.location.href = "admin.html";
+            } else {
+                alert("Contraseña incorrecta. Acceso denegado.");
+            }
+        };
+
+        window.selectProfile = async function (name) {
+            currentUser = name;
+            document.getElementById('user-greeting').innerText = `Hola, ${name}`;
+            document.getElementById('profile-selection').classList.add('fade-out');
+            document.getElementById('main-content').classList.remove('hidden');
+
+            // Check if user has points to show
+            const uQuery = query(collection(db, "usuarios"), where("nombre", "==", name));
+            const uSnap = await getDocs(uQuery);
+            if (!uSnap.empty) {
+                document.getElementById('user-points').innerText = `${uSnap.docs[0].data().puntos || 0} Puntos`;
+            }
+
+            // Load matches
+            await loadMatchesForUser(name);
+
+            // LOGIC ADJUSTMENT: Check if user already has predictions
+            const qPreds = query(collection(db, "predicciones"), where("usuario", "==", name), limit(1));
+            const snapPreds = await getDocs(qPreds);
+
+            if (!snapPreds.empty) {
+                // If they already have at least one prediction, show leaderboard directly
+                toggleView('leaderboard');
+            } else {
+                // If not, show prediction screen
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+
+            setTimeout(() => {
+                document.getElementById('profile-selection').style.display = 'none';
+            }, 500);
+        };
+
+        loadProfiles();
+    </script>
+</body>
+
+</html>

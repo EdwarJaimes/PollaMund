@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Admin - PollaMund</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary: #2ecc71; --primary-dark: #27ae60; --dark: #0f172a; --dark-light: #1e293b; --text: #f8fafc; --text-muted: #94a3b8; --glass-border: rgba(255, 255, 255, 0.1); }
+        body { font-family: 'Outfit', sans-serif; background-color: var(--dark); color: var(--text); padding: 2rem; margin: 0; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { font-size: 2rem; margin-bottom: 2rem; text-align: center; color: var(--primary); }
+        .match-card { background: var(--dark-light); border: 1px solid var(--glass-border); border-radius: 16px; padding: 1.5rem; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+        .match-header { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem; }
+        .teams-row { display: flex; align-items: center; justify-content: center; gap: 2rem; }
+        .team { display: flex; flex-direction: column; align-items: center; flex: 1; text-align: center; }
+        .flag { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; margin-bottom: 0.5rem; border: 2px solid var(--glass-border); }
+        .team-name { font-weight: 600; font-size: 0.9rem; }
+        .admin-controls { display: flex; align-items: center; justify-content: center; gap: 1rem; background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; }
+        .score-input { width: 60px; height: 50px; background: var(--dark); border: 2px solid var(--glass-border); border-radius: 8px; color: white; font-size: 1.5rem; font-weight: 800; text-align: center; }
+        .btn-process { background: var(--primary); color: #064e3b; border: none; padding: 1rem 2rem; border-radius: 12px; font-weight: 800; cursor: pointer; transition: all 0.3s; margin-top: 0.5rem; }
+        .btn-process:hover { transform: translateY(-2px); filter: brightness(1.1); }
+        .btn-process:disabled { opacity: 0.5; cursor: not-allowed; background: var(--text-muted); }
+        .status-msg { font-size: 0.8rem; text-align: center; min-height: 1rem; }
+        .status-processed { color: var(--primary); font-weight: 700; }
+
+        @media (max-width: 600px) {
+            body { padding: 1rem; }
+            h1 { font-size: 1.5rem; }
+            .match-card { padding: 1rem; }
+            .teams-row { gap: 0.5rem; justify-content: space-between; }
+            .team-name { font-size: 0.75rem; }
+            .flag { width: 30px; height: 30px; }
+            .admin-controls { padding: 0.5rem; gap: 0.5rem; }
+            .score-input { width: 45px; height: 40px; font-size: 1.2rem; }
+            .btn-process { width: 100%; padding: 0.8rem; font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Administrador PollaMund</h1>
+        <p style="text-align: center; margin-bottom: 2rem; color: var(--text-muted);">Ingresa los resultados oficiales para repartir puntos.</p>
+        
+        <div id="admin-match-list">
+            <p style="text-align: center;">Cargando partidos...</p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+        import { getFirestore, collection, query, getDocs, orderBy, doc, updateDoc, getDoc, where, writeBatch, increment } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBhREGVAE9ReZPWPfWdt30rAzjEGe_UrsM",
+            authDomain: "results-9212d.firebaseapp.com",
+            projectId: "results-9212d",
+            storageBucket: "results-9212d.firebasestorage.app",
+            messagingSenderId: "257311778953",
+            appId: "1:257311778953:web:87665d0c45d28fd232fe58"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const flagMapping = {
+            "Mexico": "mx", "South Africa": "za", "South Korea": "kr", "Czech Republic": "cz", "Canada": "ca", "Bosnia-Herzegovina": "ba", "USA": "us", "Paraguay": "py", "Qatar": "qa", "Switzerland": "ch", "Brazil": "br", "Morocco": "ma", "Haiti": "ht", "Scotland": "gb-sct", "Australia": "au", "Turkey": "tr", "Germany": "de", "Curaçao": "cw", "Netherlands": "nl", "Japan": "jp", "Ivory Coast": "ci", "Ecuador": "ec", "Sweden": "se", "Tunisia": "tn", "Spain": "es", "Cape Verde": "cv", "Belgium": "be", "Egypt": "eg", "Saudi Arabia": "sa", "Uruguay": "uy", "Iran": "ir", "New Zealand": "nz", "France": "fr", "Senegal": "sn", "Iraq": "iq", "Norway": "no", "Argentina": "ar", "Algeria": "dz", "Austria": "at", "Jordan": "jo", "Portugal": "pt", "DR Congo": "cd", "England": "gb-eng", "Croatia": "hr", "Ghana": "gh", "Panama": "pa", "Uzbekistan": "uz", "Colombia": "co"
+        };
+
+        async function loadAdminMatches() {
+            const list = document.getElementById('admin-match-list');
+            try {
+                const q = query(collection(db, "partidos"), orderBy("fecha", "asc"));
+                const snap = await getDocs(q);
+                list.innerHTML = '';
+                
+                snap.forEach(docSnap => {
+                    const m = docSnap.data();
+                    const isProcessed = m.procesado === true;
+                    
+                    list.innerHTML += `
+                        <div class="match-card" id="card-${m.idEvent}">
+                            <div class="match-header">
+                                <span>ID: ${m.idEvent} - ${m.ronda}</span>
+                                <span>${m.fecha.toDate().toLocaleDateString()}</span>
+                            </div>
+                            <div class="teams-row">
+                                <div class="team">
+                                    <img src="Pollamundial_files/${flagMapping[m.local] || 'flag_nd'}.png" class="flag">
+                                    <span class="team-name">${m.local}</span>
+                                </div>
+                                <div class="admin-controls">
+                                    <input type="number" id="real-local-${m.idEvent}" class="score-input" value="${m.goles_local ?? ''}" disabled>
+                                    <span>-</span>
+                                    <input type="number" id="real-visitante-${m.idEvent}" class="score-input" value="${m.goles_visitante ?? ''}" disabled>
+                                </div>
+                                <div class="team">
+                                    <img src="Pollamundial_files/${flagMapping[m.visitante] || 'flag_nd'}.png" class="flag">
+                                    <span class="team-name">${m.visitante}</span>
+                                </div>
+                            </div>
+                            <div class="status-msg" id="msg-${m.idEvent}">
+                                ${isProcessed ? '<span class="status-processed">PARTIDO PROCESADO ✅</span>' : ''}
+                            </div>
+                            <div class="admin-actions" id="actions-${m.idEvent}" style="display:flex; gap:10px; justify-content:center;">
+                                ${!isProcessed ? 
+                                    `<button class="btn-process" onclick="processMatchResult('${m.idEvent}', false)">Procesar Puntos</button>` : 
+                                    `<button class="btn-process" style="background:#34495e; color:white;" onclick="enableEdit('${m.idEvent}')">Editar Resultado</button>`
+                                }
+                            </div>
+                        </div>
+                    `;
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        window.enableEdit = function(matchId) {
+            document.getElementById(`real-local-${matchId}`).disabled = false;
+            document.getElementById(`real-visitante-${matchId}`).disabled = false;
+            document.getElementById(`actions-${matchId}`).innerHTML = `
+                <button class="btn-process" onclick="processMatchResult('${matchId}', true)">Guardar Corrección</button>
+                <button class="btn-process" style="background:#e74c3c; color:white;" onclick="loadAdminMatches()">Cancelar</button>
+            `;
+        };
+
+        window.processMatchResult = async function(matchId, isCorrection) {
+            const gLocal = document.getElementById(`real-local-${matchId}`).value;
+            const gVisitante = document.getElementById(`real-visitante-${matchId}`).value;
+            const msg = document.getElementById(`msg-${matchId}`);
+
+            if (gLocal === "" || gVisitante === "") {
+                alert("Por favor ingresa ambos marcadores.");
+                return;
+            }
+
+            const resLocal = parseInt(gLocal);
+            const resVisitante = parseInt(gVisitante);
+
+            try {
+                msg.innerText = isCorrection ? "Recalculando puntos..." : "Procesando puntos...";
+                
+                // 1. Buscar predicciones para este partido
+                const q = query(collection(db, "predicciones"), where("idPartido", "==", matchId));
+                const snapPreds = await getDocs(q);
+                
+                const batch = writeBatch(db);
+                let count = 0;
+
+                for (const predDoc of snapPreds.docs) {
+                    const p = predDoc.data();
+                    const prevPts = p.puntosGanados || 0;
+                    let newPts = 0;
+
+                    // Lógica de Puntos
+                    const exacto = (p.goles_local === resLocal && p.goles_visitante === resVisitante);
+                    const ganadorApostado = p.goles_local > p.goles_visitante ? 'local' : (p.goles_local < p.goles_visitante ? 'visitante' : 'empate');
+                    const ganadorReal = resLocal > resVisitante ? 'local' : (resLocal < resVisitante ? 'visitante' : 'empate');
+
+                    if (exacto) {
+                        newPts = 3;
+                    } else if (ganadorApostado === ganadorReal) {
+                        newPts = 1;
+                    }
+
+                    const diff = newPts - prevPts;
+
+                    if (diff !== 0) {
+                        const uQuery = query(collection(db, "usuarios"), where("nombre", "==", p.usuario));
+                        const uSnap = await getDocs(uQuery);
+                        if (!uSnap.empty) {
+                            batch.update(uSnap.docs[0].ref, { puntos: increment(diff) });
+                        }
+                    }
+
+                    // Actualizar puntos en la predicción para futuras correcciones
+                    batch.update(predDoc.ref, { puntosGanados: newPts });
+                    count++;
+                }
+
+                // 2. Actualizar el partido
+                batch.update(doc(db, "partidos", matchId), {
+                    goles_local: resLocal,
+                    goles_visitante: resVisitante,
+                    procesado: true
+                });
+
+                await batch.commit();
+                msg.innerHTML = `<span class="status-processed">¡ÉXITO! ${isCorrection ? 'Corrección aplicada' : 'Puntos procesados'}. ✅</span>`;
+                setTimeout(() => loadAdminMatches(), 1500);
+
+            } catch (e) {
+                console.error(e);
+                msg.innerText = "Error: " + e.message;
+            }
+        };
+
+        loadAdminMatches();
+    </script>
+</body>
+</html>
