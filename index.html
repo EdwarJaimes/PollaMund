@@ -39,8 +39,10 @@
             <h1 id="user-greeting">Hola, Invitado</h1>
             <p id="user-points">0 Puntos</p>
             <p>Has ingresado a PollaMund</p>
-            <button id="change-profile-btn" class="btn-secondary" onclick="location.reload()"
-                style="margin-top: 1rem;">Cambiar Perfil</button>
+            <div style="display:flex; gap:10px; justify-content:center; margin-top: 1rem;">
+                <button id="change-profile-btn" class="btn-secondary" onclick="location.reload()">Cambiar Perfil</button>
+                <button id="rules-btn" class="btn-secondary" onclick="showRules()">Reglas</button>
+            </div>
         </div>
 
         <section id="prediction-screen">
@@ -87,6 +89,28 @@
         </div>
     </div>
 
+    <!-- Rules Modal -->
+    <div id="rules-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 style="color: var(--primary);">Reglas del Juego</h2>
+            <div class="rules-list">
+                <div class="rule-item">
+                    <div class="rule-pts">+3</div>
+                    <div class="rule-desc"><strong>Resultado Exacto</strong><br>Aciertas el marcador final del partido.</div>
+                </div>
+                <div class="rule-item">
+                    <div class="rule-pts">+1</div>
+                    <div class="rule-desc"><strong>Acierta Ganador</strong><br>Aciertas quién gana o si hay empate, pero no el marcador.</div>
+                </div>
+                <div class="rule-item">
+                    <div class="rule-pts">0</div>
+                    <div class="rule-desc"><strong>Fallo Total</strong><br>No aciertas ni el ganador ni el marcador.</div>
+                </div>
+            </div>
+            <button class="btn-primary" onclick="closeRules()" style="padding: 0.8rem 2rem; border-radius: 12px; width: 100%;">¡Entendido!</button>
+        </div>
+    </div>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
         import { getFirestore, collection, query, where, getDocs, orderBy, doc, setDoc, serverTimestamp, limit } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
@@ -98,6 +122,16 @@
             storageBucket: "results-9212d.firebasestorage.app",
             messagingSenderId: "257311778953",
             appId: "1:257311778953:web:87665d0c45d28fd232fe58"
+        };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        window.showRules = function() {
+            document.getElementById('rules-modal').classList.add('active');
+        };
+
+        window.closeRules = function() {
+            document.getElementById('rules-modal').classList.remove('active');
         };
 
         const teamTranslations = {
@@ -117,8 +151,6 @@
             "Ghana": "Ghana", "Panama": "Panamá", "Uzbekistan": "Uzbekistán", "Colombia": "Colombia"
         };
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
         let currentUser = null;
 
         function translateTeam(name) {
@@ -258,6 +290,7 @@
             const saveBar = document.getElementById('save-bar');
             const navControls = document.getElementById('nav-controls');
             const changeProfileBtn = document.getElementById('change-profile-btn');
+            const rulesBtn = document.getElementById('rules-btn');
 
             if (view === 'leaderboard') {
                 predScreen.classList.add('hidden');
@@ -265,6 +298,7 @@
                 saveBar.classList.add('hidden');
                 navControls.classList.add('hidden');
                 changeProfileBtn.classList.add('hidden');
+                rulesBtn.classList.remove('hidden'); // Ensure rules stay
                 showLeaderboard();
             } else {
                 predScreen.classList.remove('hidden');
@@ -272,6 +306,7 @@
                 saveBar.classList.remove('hidden');
                 navControls.classList.remove('hidden');
                 changeProfileBtn.classList.remove('hidden');
+                rulesBtn.classList.remove('hidden');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
         };
