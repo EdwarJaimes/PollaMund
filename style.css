@@ -336,6 +336,18 @@ body {
     padding: 0.6rem;
     border-radius: 14px;
     width: 100%;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+
+.stepper.win {
+    background: rgba(46, 204, 113, 0.15) !important;
+    border-color: rgba(46, 204, 113, 0.3);
+}
+
+.stepper.draw {
+    background: rgba(241, 196, 15, 0.15) !important;
+    border-color: rgba(241, 196, 15, 0.3);
 }
 
 .score-label {
@@ -410,6 +422,10 @@ body {
     .team span { font-size: 0.85rem; }
     .score-label { font-size: 1.6rem; }
     .btn-step { width: 32px; height: 32px; }
+    .modal-content { padding: 1.5rem; }
+    .rule-item { padding: 0.8rem; gap: 0.8rem; }
+    .rule-pts { font-size: 1.2rem; }
+    .rule-desc { font-size: 0.8rem; }
 }
 
 .score-label.pulse {
@@ -550,10 +566,27 @@ body {
     padding: 2.5rem;
     max-width: 450px;
     width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
     text-align: center;
     transform: translateY(20px);
     transition: all 0.3s;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary) transparent;
+}
+
+.modal-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 10px;
 }
 
 .modal-overlay.active .modal-content {

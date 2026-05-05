@@ -40,7 +40,8 @@
             <p id="user-points">0 Puntos</p>
             <p>Has ingresado a PollaMund</p>
             <div style="display:flex; gap:10px; justify-content:center; margin-top: 1rem;">
-                <button id="change-profile-btn" class="btn-secondary" onclick="location.reload()">Cambiar Perfil</button>
+                <button id="change-profile-btn" class="btn-secondary" onclick="location.reload()">Cambiar de
+                    Perfil</button>
                 <button id="rules-btn" class="btn-secondary" onclick="showRules()">Reglas</button>
             </div>
         </div>
@@ -96,18 +97,22 @@
             <div class="rules-list">
                 <div class="rule-item">
                     <div class="rule-pts">+3</div>
-                    <div class="rule-desc"><strong>Resultado Exacto</strong><br>Aciertas el marcador final del partido.</div>
+                    <div class="rule-desc"><strong>Resultado Exacto</strong><br>Aciertas el marcador final del partido.
+                    </div>
                 </div>
                 <div class="rule-item">
                     <div class="rule-pts">+1</div>
-                    <div class="rule-desc"><strong>Acierta Ganador</strong><br>Aciertas quién gana o si hay empate, pero no el marcador.</div>
+                    <div class="rule-desc"><strong>Acierta Ganador</strong><br>Aciertas quién gana o si hay empate, pero
+                        no el marcador.</div>
                 </div>
                 <div class="rule-item">
                     <div class="rule-pts">0</div>
-                    <div class="rule-desc"><strong>Fallo Total</strong><br>No aciertas ni el ganador ni el marcador.</div>
+                    <div class="rule-desc"><strong>Fallo Total</strong><br>No aciertas ni el ganador ni el marcador.
+                    </div>
                 </div>
             </div>
-            <button class="btn-primary" onclick="closeRules()" style="padding: 0.8rem 2rem; border-radius: 12px; width: 100%;">¡Entendido!</button>
+            <button class="btn-primary" onclick="closeRules()"
+                style="padding: 0.8rem 2rem; border-radius: 12px; width: 100%;">¡Entendido!</button>
         </div>
     </div>
 
@@ -126,11 +131,11 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        window.showRules = function() {
+        window.showRules = function () {
             document.getElementById('rules-modal').classList.add('active');
         };
 
-        window.closeRules = function() {
+        window.closeRules = function () {
             document.getElementById('rules-modal').classList.remove('active');
         };
 
@@ -199,7 +204,7 @@
         window.changeScore = function (matchId, team, delta) {
             const label = document.getElementById(`score-${team}-${matchId}`);
             let currentStr = label.innerText;
-            
+
             let current;
             if (currentStr === "-") {
                 // First interaction sets it to 0
@@ -208,10 +213,35 @@
                 current = parseInt(currentStr);
                 current = Math.max(0, current + delta);
             }
-            
+
             label.innerText = current;
             label.classList.add('pulse');
             setTimeout(() => label.classList.remove('pulse'), 200);
+
+            // Update colors based on the new score
+            updateMatchVisuals(matchId);
+        };
+
+        window.updateMatchVisuals = function(matchId) {
+            const scoreLocal = parseInt(document.getElementById(`score-local-${matchId}`).innerText) || 0;
+            const scoreVisitante = parseInt(document.getElementById(`score-visitante-${matchId}`).innerText) || 0;
+            
+            const stepperLocal = document.getElementById(`score-local-${matchId}`).parentElement;
+            const stepperVisitante = document.getElementById(`score-visitante-${matchId}`).parentElement;
+
+            // Remove existing classes
+            stepperLocal.classList.remove('win', 'draw');
+            stepperVisitante.classList.remove('win', 'draw');
+
+            if (scoreLocal > scoreVisitante) {
+                stepperLocal.classList.add('win');
+            } else if (scoreVisitante > scoreLocal) {
+                stepperVisitante.classList.add('win');
+            } else {
+                // It's a draw
+                stepperLocal.classList.add('draw');
+                stepperVisitante.classList.add('draw');
+            }
         };
 
         // Function to load matches and existing predictions
@@ -238,7 +268,7 @@
                     const match = docSnap.data();
                     const pred = predsMap[match.idEvent] || {};
                     const date = match.fecha.toDate().toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-                    
+
                     const scoreLocal = pred.goles_local !== undefined ? pred.goles_local : "-";
                     const scoreVisitante = pred.goles_visitante !== undefined ? pred.goles_visitante : "-";
 
@@ -279,6 +309,11 @@
                             </div>
                         </div>
                     `;
+                });
+
+                // Apply initial colors
+                snapMatches.forEach(docSnap => {
+                    updateMatchVisuals(docSnap.data().idEvent);
                 });
             } catch (e) { console.error(e); }
         }
@@ -403,17 +438,8 @@
             // Load matches
             await loadMatchesForUser(name);
 
-            // LOGIC ADJUSTMENT: Check if user already has predictions
-            const qPreds = query(collection(db, "predicciones"), where("usuario", "==", name), limit(1));
-            const snapPreds = await getDocs(qPreds);
-
-            if (!snapPreds.empty) {
-                // If they already have at least one prediction, show leaderboard directly
-                toggleView('leaderboard');
-            } else {
-                // If not, show prediction screen
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
+            // Siempre mostrar la tabla de clasificación al inicio
+            toggleView('leaderboard');
 
             setTimeout(() => {
                 document.getElementById('profile-selection').style.display = 'none';
