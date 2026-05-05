@@ -233,6 +233,13 @@
             stepperLocal.classList.remove('win', 'draw');
             stepperVisitante.classList.remove('win', 'draw');
 
+            // If scores are not numbers (still "-"), don't apply colors
+            if (isNaN(scoreLocal) || isNaN(scoreVisitante) || 
+                document.getElementById(`score-local-${matchId}`).innerText === "-" ||
+                document.getElementById(`score-visitante-${matchId}`).innerText === "-") {
+                return;
+            }
+
             if (scoreLocal > scoreVisitante) {
                 stepperLocal.classList.add('win');
             } else if (scoreVisitante > scoreLocal) {
@@ -387,17 +394,20 @@
                 const cards = document.querySelectorAll('.match-card');
                 for (const card of cards) {
                     const matchId = card.dataset.id;
-                    const goalsLocal = document.getElementById(`score-local-${matchId}`).innerText;
-                    const goalsAway = document.getElementById(`score-visitante-${matchId}`).innerText;
+                    const goalsLocalText = document.getElementById(`score-local-${matchId}`).innerText;
+                    const goalsAwayText = document.getElementById(`score-visitante-${matchId}`).innerText;
 
-                    const docId = `${currentUser}_${matchId}`;
-                    await setDoc(doc(db, "predicciones", docId), {
-                        usuario: currentUser,
-                        idPartido: matchId,
-                        goles_local: parseInt(goalsLocal),
-                        goles_visitante: parseInt(goalsAway),
-                        fecha_apuesta: serverTimestamp()
-                    });
+                    // Only save if BOTH scores are defined (not "-")
+                    if (goalsLocalText !== "-" && goalsAwayText !== "-") {
+                        const docId = `${currentUser}_${matchId}`;
+                        await setDoc(doc(db, "predicciones", docId), {
+                            usuario: currentUser,
+                            idPartido: matchId,
+                            goles_local: parseInt(goalsLocalText),
+                            goles_visitante: parseInt(goalsAwayText),
+                            fecha_apuesta: serverTimestamp()
+                        });
+                    }
                 }
 
                 btn.innerText = "¡Guardado con éxito! ✅";
