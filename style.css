@@ -134,8 +134,10 @@ body {
     z-index: 1000;
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start; /* Changed from center to allow scrolling from the top */
     transition: opacity 0.5s, transform 0.5s;
+    overflow-y: auto; /* Enable scroll for the whole overlay */
+    padding: 2rem 1rem;
 }
 
 .profile-overlay.fade-out {
@@ -149,6 +151,7 @@ body {
     max-width: 600px;
     width: 100%;
     padding: 2rem;
+    margin: auto; /* Centers the container when it's smaller than the screen */
 }
 
 .profile-container h1 {
