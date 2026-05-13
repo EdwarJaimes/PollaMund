@@ -26,6 +26,12 @@
         .status-msg { font-size: 0.8rem; text-align: center; min-height: 1rem; }
         .status-processed { color: var(--primary); font-weight: 700; }
 
+        /* Danger Zone Styles */
+        .danger-zone { margin-top: 4rem; padding: 2rem; border: 1px dashed #e74c3c; border-radius: 16px; background: rgba(231, 76, 60, 0.05); text-align: center; }
+        .danger-zone h2 { color: #e74c3c; font-size: 1.2rem; margin-top: 0; }
+        .btn-danger { background: #e74c3c; color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s; }
+        .btn-danger:hover { background: #c0392b; transform: scale(1.02); }
+
         @media (max-width: 600px) {
             body { padding: 1rem; }
             h1 { font-size: 1.5rem; }
@@ -47,11 +53,21 @@
         <div id="admin-match-list">
             <p style="text-align: center;">Cargando partidos...</p>
         </div>
+
+        <div class="danger-zone">
+            <h2>Zona de Peligro</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
+                Esta acción eliminará <b>TODAS</b> las predicciones, reseteará los puntos de los usuarios a 0 y limpiará los resultados de los partidos. 
+                Úsalo solo para preparar la app para el torneo real.
+            </p>
+            <button class="btn-danger" id="reset-btn" onclick="resetApp()">Reiniciar Base de Datos</button>
+            <div id="reset-status" style="margin-top: 1rem; font-size: 0.8rem;"></div>
+        </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-        import { getFirestore, collection, query, getDocs, orderBy, doc, updateDoc, getDoc, where, writeBatch, increment } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+        import { getFirestore, collection, query, getDocs, orderBy, doc, updateDoc, getDoc, where, writeBatch, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBhREGVAE9ReZPWPfWdt30rAzjEGe_UrsM",
@@ -193,6 +209,61 @@
             } catch (e) {
                 console.error(e);
                 msg.innerText = "Error: " + e.message;
+            }
+        };
+
+        window.resetApp = async function() {
+            const confirm1 = confirm("⚠️ ¿ESTÁS SEGURO? Esta acción es IRREVERSIBLE y borrará todas las predicciones actuales.");
+            if (!confirm1) return;
+            
+            const confirm2 = confirm("Confirmación final: ¿Realmente deseas resetear toda la PollaMund para iniciar de cero?");
+            if (!confirm2) return;
+
+            const btn = document.getElementById('reset-btn');
+            const status = document.getElementById('reset-status');
+            
+            btn.disabled = true;
+            status.innerHTML = "Iniciando reset...";
+            status.style.color = "var(--text-muted)";
+
+            try {
+                const batch = writeBatch(db);
+
+                // 1. Eliminar todas las predicciones
+                status.innerHTML = "Eliminando predicciones...";
+                const predSnap = await getDocs(collection(db, "predicciones"));
+                predSnap.forEach(d => batch.delete(d.ref));
+
+                // 2. Resetear puntos de usuarios
+                status.innerHTML = "Reseteando puntos de usuarios...";
+                const userSnap = await getDocs(collection(db, "usuarios"));
+                userSnap.forEach(d => batch.update(d.ref, { puntos: 0 }));
+
+                // 3. Limpiar partidos
+                status.innerHTML = "Limpiando resultados de partidos...";
+                const matchSnap = await getDocs(collection(db, "partidos"));
+                matchSnap.forEach(d => {
+                    batch.update(d.ref, {
+                        goles_local: null,
+                        goles_visitante: null,
+                        procesado: false
+                    });
+                });
+
+                await batch.commit();
+                
+                status.innerHTML = "✅ ¡Base de datos reseteada con éxito!";
+                status.style.color = "var(--primary)";
+                
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+
+            } catch (e) {
+                console.error(e);
+                status.innerHTML = "❌ Error: " + e.message;
+                status.style.color = "#e74c3c";
+                btn.disabled = false;
             }
         };
 

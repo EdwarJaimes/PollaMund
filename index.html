@@ -20,6 +20,27 @@
             <h2 id="title-profiles">Polla Mundialista 2026</h2>
             <p id="title-subtitle">¿Quién está jugando?</p>
 
+            <div style="margin-bottom: 2rem;">
+                <button id="quick-view-btn" class="btn-secondary" onclick="toggleQuickLeaderboard()" style="width: 100%; border-color: var(--secondary); color: var(--secondary);">
+                    Ver Tabla de Clasificación 📊
+                </button>
+                
+                <div id="quick-leaderboard" class="hidden" style="margin-top: 1rem; animation: fadeIn 0.3s ease-out;">
+                    <table class="leaderboard-table" style="font-size: 0.9rem;">
+                        <thead>
+                            <tr>
+                                <th class="rank-col" style="padding: 0.8rem;">Pos</th>
+                                <th class="name-col" style="padding: 0.8rem;">Participante</th>
+                                <th class="points-col" style="padding: 0.8rem;">Pts</th>
+                            </tr>
+                        </thead>
+                        <tbody id="quick-leaderboard-body">
+                            <!-- Se cargará dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <div id="profiles-list" class="profile-grid">
                 <!-- Los perfiles se cargarán dinámicamente aquí -->
                 <p style="color: var(--text-muted);">Cargando participantes...</p>
@@ -429,6 +450,53 @@
                 window.location.href = "admin.html";
             } else {
                 alert("Contraseña incorrecta. Acceso denegado.");
+            }
+        };
+
+        window.toggleQuickLeaderboard = async function() {
+            const container = document.getElementById('quick-leaderboard');
+            const btn = document.getElementById('quick-view-btn');
+            const body = document.getElementById('quick-leaderboard-body');
+            
+            if (container.classList.contains('hidden')) {
+                container.classList.remove('hidden');
+                btn.innerText = "Cerrar Tabla ✖";
+                btn.style.borderColor = "var(--text-muted)";
+                btn.style.color = "var(--text-muted)";
+                
+                body.innerHTML = '<tr><td colspan="3" style="text-align:center; padding: 1rem;">Cargando...</td></tr>';
+                
+                try {
+                    const q = query(collection(db, "usuarios"), orderBy("puntos", "desc"));
+                    const snap = await getDocs(q);
+                    body.innerHTML = '';
+                    
+                    let rank = 1;
+                    snap.forEach(docSnap => {
+                        const user = docSnap.data();
+                        let rankIcon = rank;
+                        if (rank === 1) rankIcon = '🥇';
+                        if (rank === 2) rankIcon = '🥈';
+                        if (rank === 3) rankIcon = '🥉';
+                        
+                        body.innerHTML += `
+                            <tr>
+                                <td class="rank-col" style="padding: 0.8rem;">${rankIcon}</td>
+                                <td class="name-col" style="padding: 0.8rem; text-align: left;">${user.nombre}</td>
+                                <td class="points-col" style="padding: 0.8rem;">${user.puntos || 0}</td>
+                            </tr>
+                        `;
+                        rank++;
+                    });
+                } catch (e) { 
+                    console.error(e);
+                    body.innerHTML = '<tr><td colspan="3" style="text-align:center; color: #ef4444;">Error al cargar</td></tr>';
+                }
+            } else {
+                container.classList.add('hidden');
+                btn.innerText = "Ver Tabla de Clasificación 📊";
+                btn.style.borderColor = "var(--secondary)";
+                btn.style.color = "var(--secondary)";
             }
         };
 
