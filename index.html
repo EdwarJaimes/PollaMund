@@ -106,9 +106,6 @@
                 title="Ir abajo">▼</button>
         </div>
 
-        <div class="save-bar" id="save-bar">
-            <button id="save-btn" class="btn-primary btn-large">Guardar Todas mis Predicciones</button>
-        </div>
     </div>
 
     <!-- Rules Modal -->
@@ -239,6 +236,14 @@
             label.classList.add('pulse');
             setTimeout(() => label.classList.remove('pulse'), 200);
 
+            // Enable save button if both scores are set
+            const otherTeam = team === 'local' ? 'visitante' : 'local';
+            const otherScore = document.getElementById(`score-${otherTeam}-${matchId}`).innerText;
+            const saveBtn = document.getElementById(`btn-save-${matchId}`);
+            if (saveBtn && otherScore !== "-") {
+                saveBtn.disabled = false;
+            }
+
             // Update colors based on the new score
             updateMatchVisuals(matchId);
         };
@@ -299,9 +304,11 @@
 
                     const scoreLocal = pred.goles_local !== undefined ? pred.goles_local : "-";
                     const scoreVisitante = pred.goles_visitante !== undefined ? pred.goles_visitante : "-";
+                    const isSaved = pred.idPartido !== undefined;
+                    const saveBtnId = `btn-save-${match.idEvent}`;
 
                     matchList.innerHTML += `
-                        <div class="match-card" data-id="${match.idEvent}">
+                        <div class="match-card" data-id="${match.idEvent}" id="card-${match.idEvent}">
                             <div class="match-info">
                                 <span>${match.ronda}</span>
                                 <span>${date}</span>
@@ -311,28 +318,45 @@
                                     <div class="team" data-team="local">
                                         <img src="${getFlagUrl(match.local)}" class="flag" onerror="this.src='Pollamundial_files/flag_nd.png'" alt="${match.local}">
                                         <span>${translateTeam(match.local)}</span>
-                                        <div class="stepper">
+                                        <div class="stepper ${isSaved ? 'locked' : ''}">
                                             <span class="score-label" id="score-local-${match.idEvent}">${scoreLocal}</span>
+                                            ${!isSaved ? `
                                             <div class="stepper-btns">
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'local', -1)">-</button>
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'local', 1)">+</button>
-                                            </div>
+                                            </div>` : ''}
                                         </div>
                                     </div>
                                     
                                     <div class="vs-badge">VS</div>
-
+                                    
                                     <div class="team" data-team="visitante">
                                         <img src="${getFlagUrl(match.visitante)}" class="flag" onerror="this.src='Pollamundial_files/flag_nd.png'" alt="${match.visitante}">
                                         <span>${translateTeam(match.visitante)}</span>
-                                        <div class="stepper">
+                                        <div class="stepper ${isSaved ? 'locked' : ''}">
                                             <span class="score-label" id="score-visitante-${match.idEvent}">${scoreVisitante}</span>
+                                            ${!isSaved ? `
                                             <div class="stepper-btns">
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'visitante', -1)">-</button>
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'visitante', 1)">+</button>
-                                            </div>
+                                            </div>` : ''}
                                         </div>
                                     </div>
+                                </div>
+                                
+                                <div class="match-footer" style="margin-top: 1.5rem; text-align: center;">
+                                    ${!isSaved ? `
+                                        <button id="${saveBtnId}" class="btn-primary" 
+                                            style="padding: 0.6rem 1.2rem; border-radius: 10px; font-size: 0.85rem; width: 100%;" 
+                                            onclick="saveIndividualPrediction('${match.idEvent}')"
+                                            ${scoreLocal === "-" ? 'disabled' : ''}>
+                                            Guardar Predicción
+                                        </button>
+                                    ` : `
+                                        <div style="color: var(--primary); font-weight: 800; font-size: 0.8rem; letter-spacing: 1px;">
+                                            PREDICCIÓN GUARDADA ✅
+                                        </div>
+                                    `}
                                 </div>
                             </div>
                         </div>
@@ -350,15 +374,14 @@
         window.toggleView = function (view) {
             const predScreen = document.getElementById('prediction-screen');
             const leadScreen = document.getElementById('leaderboard-screen');
-            const saveBar = document.getElementById('save-bar');
             const navControls = document.getElementById('nav-controls');
             const changeProfileBtn = document.getElementById('change-profile-btn');
             const rulesBtn = document.getElementById('rules-btn');
+            // saveBar removed
 
             if (view === 'leaderboard') {
                 predScreen.classList.add('hidden');
                 leadScreen.classList.remove('hidden');
-                saveBar.classList.add('hidden');
                 navControls.classList.add('hidden');
                 changeProfileBtn.classList.add('hidden');
                 rulesBtn.classList.remove('hidden'); // Ensure rules stay
@@ -366,7 +389,6 @@
             } else {
                 predScreen.classList.remove('hidden');
                 leadScreen.classList.add('hidden');
-                saveBar.classList.remove('hidden');
                 navControls.classList.remove('hidden');
                 changeProfileBtn.classList.remove('hidden');
                 rulesBtn.classList.remove('hidden');
@@ -404,43 +426,40 @@
             } catch (e) { console.error(e); }
         }
 
-        // Save functionality
-        document.getElementById('save-btn').onclick = async () => {
-            const btn = document.getElementById('save-btn');
-            const originalText = btn.innerText;
-            btn.innerText = "Guardando...";
+        // Individual Save functionality
+        window.saveIndividualPrediction = async (matchId) => {
+            const goalsLocalText = document.getElementById(`score-local-${matchId}`).innerText;
+            const goalsAwayText = document.getElementById(`score-visitante-${matchId}`).innerText;
+
+            if (goalsLocalText === "-" || goalsAwayText === "-") {
+                alert("Por favor establece un marcador antes de guardar.");
+                return;
+            }
+
+            const confirmSave = confirm("¿Estás seguro? Una vez guardada, no podrás modificar esta predicción.");
+            if (!confirmSave) return;
+
+            const btn = document.getElementById(`btn-save-${matchId}`);
             btn.disabled = true;
+            btn.innerText = "Guardando...";
 
             try {
-                const cards = document.querySelectorAll('.match-card');
-                for (const card of cards) {
-                    const matchId = card.dataset.id;
-                    const goalsLocalText = document.getElementById(`score-local-${matchId}`).innerText;
-                    const goalsAwayText = document.getElementById(`score-visitante-${matchId}`).innerText;
+                const docId = `${currentUser}_${matchId}`;
+                await setDoc(doc(db, "predicciones", docId), {
+                    usuario: currentUser,
+                    idPartido: matchId,
+                    goles_local: parseInt(goalsLocalText),
+                    goles_visitante: parseInt(goalsAwayText),
+                    fecha_apuesta: serverTimestamp()
+                });
 
-                    // Only save if BOTH scores are defined (not "-")
-                    if (goalsLocalText !== "-" && goalsAwayText !== "-") {
-                        const docId = `${currentUser}_${matchId}`;
-                        await setDoc(doc(db, "predicciones", docId), {
-                            usuario: currentUser,
-                            idPartido: matchId,
-                            goles_local: parseInt(goalsLocalText),
-                            goles_visitante: parseInt(goalsAwayText),
-                            fecha_apuesta: serverTimestamp()
-                        });
-                    }
-                }
-
-                btn.innerText = "¡Guardado con éxito! ✅";
-                setTimeout(() => {
-                    btn.innerText = originalText;
-                    btn.disabled = false;
-                    toggleView('leaderboard');
-                }, 1500);
+                // Update UI to locked state
+                loadMatchesForUser(currentUser);
             } catch (e) {
                 console.error(e);
-                btn.innerText = "Error al guardar ❌";
+                alert("Error al guardar: " + e.message);
                 btn.disabled = false;
+                btn.innerText = "Guardar Predicción";
             }
         };
 
