@@ -269,7 +269,22 @@
 
             // Update colors based on the new score
             updateMatchVisuals(matchId);
+            updatePronosticoSummary(matchId);
         };
+
+        function updatePronosticoSummary(matchId) {
+            const summary = document.getElementById(`pronostico-${matchId}`);
+            if (!summary) return;
+
+            const local = document.getElementById(`score-local-${matchId}`).innerText;
+            const visitante = document.getElementById(`score-visitante-${matchId}`).innerText;
+
+            if (local === "-" || visitante === "-") {
+                summary.innerText = "—";
+            } else {
+                summary.innerText = `${local} - ${visitante}`;
+            }
+        }
 
         window.updateMatchVisuals = function(matchId) {
             const scoreLocal = parseInt(document.getElementById(`score-local-${matchId}`).innerText) || 0;
@@ -331,10 +346,20 @@
                     const isLocked = isPredictionLocked(match);
                     const isSaved = pred.idPartido !== undefined;
                     const canEdit = canEditPrediction(match, isSaved);
-                    const scoreLocal = isMatchPlayed ? match.goles_local : (pred.goles_local !== undefined ? pred.goles_local : "-");
-                    const scoreVisitante = isMatchPlayed ? match.goles_visitante : (pred.goles_visitante !== undefined ? pred.goles_visitante : "-");
+                    const predLocal = pred.goles_local !== undefined ? pred.goles_local : "-";
+                    const predVisitante = pred.goles_visitante !== undefined ? pred.goles_visitante : "-";
                     const saveBtnId = `btn-save-${match.idEvent}`;
                     const lockedReason = isMatchPlayed ? '' : (match.bloqueado ? 'cerradas por el administrador' : (appConfig.bloquearAlIniciar && match.fecha.toDate() <= new Date() ? 'el partido ya inició' : ''));
+
+                    const pronosticoHtml = isSaved
+                        ? `<div class="prediction-summary">Tu pronóstico: <strong>${pred.goles_local} - ${pred.goles_visitante}</strong></div>`
+                        : (isLocked || isMatchPlayed
+                            ? `<div class="prediction-summary empty">Tu pronóstico: <strong>Sin pronóstico</strong></div>`
+                            : `<div class="prediction-summary">Tu pronóstico: <strong id="pronostico-${match.idEvent}">—</strong></div>`);
+
+                    const officialHtml = isMatchPlayed
+                        ? `<div class="official-result">Resultado oficial: <strong>${match.goles_local} - ${match.goles_visitante}</strong> ⚽</div>`
+                        : '';
 
                     matchList.innerHTML += `
                         <div class="match-card" data-id="${match.idEvent}" id="card-${match.idEvent}">
@@ -344,12 +369,16 @@
                                 ${isMatchPlayed ? `<span style="color: #e74c3c; font-weight: 800; font-size: 0.75rem;">⚽ JUGADO</span>` : (isLocked ? `<span style="color: #f1c40f; font-weight: 800; font-size: 0.75rem;">🔒 CERRADO</span>` : '')}
                             </div>
                             <div class="match-body">
+                                <div class="scores-summary">
+                                    ${pronosticoHtml}
+                                    ${officialHtml}
+                                </div>
                                 <div class="match-teams">
                                     <div class="team" data-team="local">
                                         <img src="${getFlagUrl(match.local)}" class="flag" onerror="this.src='Pollamundial_files/flag_nd.png'" alt="${match.local}">
                                         <span>${translateTeam(match.local)}</span>
                                         <div class="stepper ${!canEdit ? 'locked' : ''}">
-                                            <span class="score-label" id="score-local-${match.idEvent}">${scoreLocal}</span>
+                                            <span class="score-label" id="score-local-${match.idEvent}">${predLocal}</span>
                                             ${canEdit ? `
                                             <div class="stepper-btns">
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'local', -1)">-</button>
@@ -364,7 +393,7 @@
                                         <img src="${getFlagUrl(match.visitante)}" class="flag" onerror="this.src='Pollamundial_files/flag_nd.png'" alt="${match.visitante}">
                                         <span>${translateTeam(match.visitante)}</span>
                                         <div class="stepper ${!canEdit ? 'locked' : ''}">
-                                            <span class="score-label" id="score-visitante-${match.idEvent}">${scoreVisitante}</span>
+                                            <span class="score-label" id="score-visitante-${match.idEvent}">${predVisitante}</span>
                                             ${canEdit ? `
                                             <div class="stepper-btns">
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'visitante', -1)">-</button>
@@ -375,19 +404,15 @@
                                 </div>
                                 
                                 <div class="match-footer" style="margin-top: 1.5rem; text-align: center;">
-                                    ${isMatchPlayed ? `
-                                        <div style="color: #e74c3c; font-weight: 800; font-size: 0.8rem; letter-spacing: 1px;">
-                                            RESULTADO OFICIAL ⚽
-                                        </div>
-                                    ` : (isLocked ? `
+                                    ${isMatchPlayed ? '' : (isLocked ? `
                                         <div style="color: #f1c40f; font-weight: 800; font-size: 0.8rem; letter-spacing: 1px;">
-                                            ${isSaved ? 'PREDICCIÓN GUARDADA ✅' : 'SIN PREDICCIÓN'} — CERRADO${lockedReason ? ` (${lockedReason})` : ''}
+                                            ${isSaved ? 'PREDICCIÓN CERRADA ✅' : 'SIN PREDICCIÓN — CERRADO'}${lockedReason ? ` (${lockedReason})` : ''}
                                         </div>
                                     ` : (canEdit ? `
                                         <button id="${saveBtnId}" class="btn-primary" 
                                             style="padding: 0.6rem 1.2rem; border-radius: 10px; font-size: 0.85rem; width: 100%;" 
                                             onclick="saveIndividualPrediction('${match.idEvent}', ${isSaved})"
-                                            ${scoreLocal === "-" ? 'disabled' : ''}>
+                                            ${predLocal === "-" ? 'disabled' : ''}>
                                             ${isSaved ? 'Actualizar Predicción' : 'Guardar Predicción'}
                                         </button>
                                     ` : `
