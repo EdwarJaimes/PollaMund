@@ -302,8 +302,9 @@
                     const pred = predsMap[match.idEvent] || {};
                     const date = match.fecha.toDate().toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-                    const scoreLocal = pred.goles_local !== undefined ? pred.goles_local : "-";
-                    const scoreVisitante = pred.goles_visitante !== undefined ? pred.goles_visitante : "-";
+                    const isMatchPlayed = match.procesado === true;
+                    const scoreLocal = isMatchPlayed ? match.goles_local : (pred.goles_local !== undefined ? pred.goles_local : "-");
+                    const scoreVisitante = isMatchPlayed ? match.goles_visitante : (pred.goles_visitante !== undefined ? pred.goles_visitante : "-");
                     const isSaved = pred.idPartido !== undefined;
                     const saveBtnId = `btn-save-${match.idEvent}`;
 
@@ -312,15 +313,16 @@
                             <div class="match-info">
                                 <span>${match.ronda}</span>
                                 <span>${date}</span>
+                                ${isMatchPlayed ? `<span style="color: #e74c3c; font-weight: 800; font-size: 0.75rem;">⚽ JUGADO</span>` : ''}
                             </div>
                             <div class="match-body">
                                 <div class="match-teams">
                                     <div class="team" data-team="local">
                                         <img src="${getFlagUrl(match.local)}" class="flag" onerror="this.src='Pollamundial_files/flag_nd.png'" alt="${match.local}">
                                         <span>${translateTeam(match.local)}</span>
-                                        <div class="stepper ${isSaved ? 'locked' : ''}">
+                                        <div class="stepper ${isSaved || isMatchPlayed ? 'locked' : ''}">
                                             <span class="score-label" id="score-local-${match.idEvent}">${scoreLocal}</span>
-                                            ${!isSaved ? `
+                                            ${!isSaved && !isMatchPlayed ? `
                                             <div class="stepper-btns">
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'local', -1)">-</button>
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'local', 1)">+</button>
@@ -333,9 +335,9 @@
                                     <div class="team" data-team="visitante">
                                         <img src="${getFlagUrl(match.visitante)}" class="flag" onerror="this.src='Pollamundial_files/flag_nd.png'" alt="${match.visitante}">
                                         <span>${translateTeam(match.visitante)}</span>
-                                        <div class="stepper ${isSaved ? 'locked' : ''}">
+                                        <div class="stepper ${isSaved || isMatchPlayed ? 'locked' : ''}">
                                             <span class="score-label" id="score-visitante-${match.idEvent}">${scoreVisitante}</span>
-                                            ${!isSaved ? `
+                                            ${!isSaved && !isMatchPlayed ? `
                                             <div class="stepper-btns">
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'visitante', -1)">-</button>
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'visitante', 1)">+</button>
@@ -345,7 +347,11 @@
                                 </div>
                                 
                                 <div class="match-footer" style="margin-top: 1.5rem; text-align: center;">
-                                    ${!isSaved ? `
+                                    ${isMatchPlayed ? `
+                                        <div style="color: #e74c3c; font-weight: 800; font-size: 0.8rem; letter-spacing: 1px;">
+                                            RESULTADO OFICIAL ⚽
+                                        </div>
+                                    ` : (!isSaved ? `
                                         <button id="${saveBtnId}" class="btn-primary" 
                                             style="padding: 0.6rem 1.2rem; border-radius: 10px; font-size: 0.85rem; width: 100%;" 
                                             onclick="saveIndividualPrediction('${match.idEvent}')"
@@ -356,7 +362,7 @@
                                         <div style="color: var(--primary); font-weight: 800; font-size: 0.8rem; letter-spacing: 1px;">
                                             PREDICCIÓN GUARDADA ✅
                                         </div>
-                                    `}
+                                    `)}
                                 </div>
                             </div>
                         </div>
