@@ -32,6 +32,18 @@
         .btn-danger { background: #e74c3c; color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s; }
         .btn-danger:hover { background: #c0392b; transform: scale(1.02); }
 
+        /* Participants Section */
+        .participants-zone { margin-top: 3rem; padding: 2rem; border: 1px solid var(--glass-border); border-radius: 16px; background: rgba(46, 204, 113, 0.05); }
+        .participants-zone h2 { color: var(--primary); font-size: 1.2rem; margin-top: 0; }
+        .add-participant-form { display: flex; gap: 1rem; margin-bottom: 2rem; }
+        .add-participant-form input { flex: 1; padding: 0.8rem; background: var(--dark); border: 1px solid var(--glass-border); border-radius: 8px; color: white; font-family: 'Outfit', sans-serif; }
+        .add-participant-form button { padding: 0.8rem 1.5rem; background: var(--primary); color: #064e3b; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; transition: all 0.3s; }
+        .add-participant-form button:hover { transform: translateY(-2px); filter: brightness(1.1); }
+        .participants-list { display: flex; flex-wrap: wrap; gap: 1rem; }
+        .participant-badge { background: rgba(46, 204, 113, 0.15); border: 1px solid rgba(46, 204, 113, 0.3); padding: 0.8rem 1.2rem; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+        .participant-badge button { background: #e74c3c; color: white; border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; }
+        .participant-badge button:hover { background: #c0392b; }
+
         @media (max-width: 600px) {
             body { padding: 1rem; }
             h1 { font-size: 1.5rem; }
@@ -54,6 +66,21 @@
             <p style="text-align: center;">Cargando partidos...</p>
         </div>
 
+        <div class="participants-zone">
+            <h2>Gestionar Participantes</h2>
+            <div class="add-participant-form">
+                <input type="text" id="new-participant-name" placeholder="Nombre del nuevo participante" maxlength="50">
+                <button onclick="addNewParticipant()">Agregar Participante</button>
+            </div>
+            <div style="margin-top: 1.5rem;">
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Participantes actuales:</p>
+                <div class="participants-list" id="participants-list">
+                    <p style="color: var(--text-muted);">Cargando...</p>
+                </div>
+            </div>
+            <div id="participant-status" style="margin-top: 1rem; font-size: 0.8rem;"></div>
+        </div>
+
         <div class="danger-zone">
             <h2>Zona de Peligro</h2>
             <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
@@ -67,7 +94,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-        import { getFirestore, collection, query, getDocs, orderBy, doc, updateDoc, getDoc, where, writeBatch, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+        import { getFirestore, collection, query, getDocs, orderBy, doc, updateDoc, getDoc, where, writeBatch, increment, deleteDoc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBhREGVAE9ReZPWPfWdt30rAzjEGe_UrsM",
@@ -267,7 +294,96 @@
             }
         };
 
+        async function loadParticipants() {
+            const list = document.getElementById('participants-list');
+            try {
+                const q = query(collection(db, "usuarios"), orderBy("nombre", "asc"));
+                const snap = await getDocs(q);
+                list.innerHTML = '';
+                
+                if (snap.empty) {
+                    list.innerHTML = '<p style="color: var(--text-muted);">No hay participantes aún.</p>';
+                    return;
+                }
+
+                snap.forEach(doc => {
+                    const user = doc.data();
+                    list.innerHTML += `
+                        <div class="participant-badge">
+                            <span>${user.nombre} (${user.puntos || 0} pts)</span>
+                            <button onclick="deleteParticipant('${user.nombre}')">Eliminar</button>
+                        </div>
+                    `;
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        window.addNewParticipant = async function() {
+            const input = document.getElementById('new-participant-name');
+            const name = input.value.trim();
+            const status = document.getElementById('participant-status');
+
+            if (!name) {
+                status.innerHTML = '❌ Por favor ingresa un nombre.';
+                status.style.color = '#e74c3c';
+                return;
+            }
+
+            try {
+                // Verificar si ya existe
+                const q = query(collection(db, "usuarios"), where("nombre", "==", name));
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                    status.innerHTML = '❌ El participante ya existe.';
+                    status.style.color = '#e74c3c';
+                    return;
+                }
+
+                // Crear nuevo participante
+                const newUser = {
+                    nombre: name,
+                    puntos: 0,
+                    createdAt: serverTimestamp()
+                };
+
+                const docRef = doc(collection(db, "usuarios"), name);
+                await setDoc(docRef, newUser);
+
+                input.value = '';
+                status.innerHTML = `✅ ¡${name} ha sido agregado!`;
+                status.style.color = 'var(--primary)';
+                setTimeout(() => {
+                    status.innerHTML = '';
+                    loadParticipants();
+                }, 1500);
+            } catch (e) {
+                console.error(e);
+                status.innerHTML = '❌ Error: ' + e.message;
+                status.style.color = '#e74c3c';
+            }
+        };
+
+        window.deleteParticipant = async function(name) {
+            if (!confirm(`¿Eliminar a ${name}? Sus predicciones se mantendrán.`)) return;
+
+            const status = document.getElementById('participant-status');
+            try {
+                await deleteDoc(doc(db, "usuarios", name));
+                status.innerHTML = `✅ ${name} ha sido eliminado.`;
+                status.style.color = 'var(--primary)';
+                setTimeout(() => {
+                    status.innerHTML = '';
+                    loadParticipants();
+                }, 1500);
+            } catch (e) {
+                console.error(e);
+                status.innerHTML = '❌ Error: ' + e.message;
+                status.style.color = '#e74c3c';
+            }
+        };
+
         loadAdminMatches();
+        loadParticipants();
     </script>
 </body>
 </html>
