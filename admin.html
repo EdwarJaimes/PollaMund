@@ -40,9 +40,20 @@
         .add-participant-form button { padding: 0.8rem 1.5rem; background: var(--primary); color: #064e3b; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; transition: all 0.3s; }
         .add-participant-form button:hover { transform: translateY(-2px); filter: brightness(1.1); }
         .participants-list { display: flex; flex-wrap: wrap; gap: 1rem; }
-        .participant-badge { background: rgba(46, 204, 113, 0.15); border: 1px solid rgba(46, 204, 113, 0.3); padding: 0.8rem 1.2rem; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-        .participant-badge button { background: #e74c3c; color: white; border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; }
+        .participant-badge { background: rgba(46, 204, 113, 0.15); border: 1px solid rgba(46, 204, 113, 0.3); padding: 1rem 1.2rem; border-radius: 8px; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+        .participant-badge button { background: #e74c3c; color: white; border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; white-space: nowrap; }
         .participant-badge button:hover { background: #c0392b; }
+
+        /* Import Dates Section */
+        .import-zone { margin-top: 3rem; padding: 2rem; border: 1px solid rgba(52, 152, 219, 0.3); border-radius: 16px; background: rgba(52, 152, 219, 0.05); }
+        .import-zone h2 { color: #3498db; font-size: 1.2rem; margin-top: 0; }
+        .import-zone textarea { width: 100%; min-height: 150px; padding: 1rem; background: var(--dark); border: 1px solid var(--glass-border); border-radius: 8px; color: white; font-family: 'Courier New', monospace; font-size: 0.85rem; margin-bottom: 1rem; }
+        .import-zone button { padding: 0.8rem 1.5rem; background: #3498db; color: white; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; transition: all 0.3s; }
+        .import-zone button:hover { transform: translateY(-2px); filter: brightness(1.1); }
+        .import-zone button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .import-status { margin-top: 1.5rem; padding: 1rem; border-radius: 8px; font-size: 0.85rem; }
+        .import-status.success { background: rgba(46, 204, 113, 0.1); border: 1px solid rgba(46, 204, 113, 0.3); color: var(--primary); }
+        .import-status.error { background: rgba(231, 76, 60, 0.1); border: 1px solid rgba(231, 76, 60, 0.3); color: #e74c3c; }
 
         @media (max-width: 600px) {
             body { padding: 1rem; }
@@ -79,6 +90,16 @@
                 </div>
             </div>
             <div id="participant-status" style="margin-top: 1rem; font-size: 0.8rem;"></div>
+        </div>
+
+        <div class="import-zone">
+            <h2>📅 Importar Fechas</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+                Pega el JSON con las fechas actuales y haz clic para actualizar. Las horas serán convertidas a zona horaria de Colombia (UTC-5).
+            </p>
+            <textarea id="json-dates" placeholder='Pega el JSON aquí con formato: [{"fecha":"2026-06-11","partido":"México vs Sudáfrica","hora":"14:00"}, ...]'></textarea>
+            <button onclick="importDates()" id="import-btn">Actualizar Fechas en Firebase</button>
+            <div id="import-status"></div>
         </div>
 
         <div class="danger-zone">
@@ -306,15 +327,28 @@
                     return;
                 }
 
-                snap.forEach(doc => {
+                for (const doc of snap.docs) {
                     const user = doc.data();
+                    
+                    // Contar predicciones del usuario
+                    const qPreds = query(collection(db, "predicciones"), where("usuario", "==", user.nombre));
+                    const snapPreds = await getDocs(qPreds);
+                    const predCount = snapPreds.size;
+                    
+                    const predStatus = predCount > 0 
+                        ? `<span style="color: var(--primary); font-weight: 600;">✓ ${predCount} predicción${predCount !== 1 ? 'es' : ''}</span>` 
+                        : `<span style="color: var(--text-muted);">○ Sin predicciones</span>`;
+                    
                     list.innerHTML += `
                         <div class="participant-badge">
-                            <span>${user.nombre} (${user.puntos || 0} pts)</span>
+                            <span style="flex: 1;">
+                                <strong>${user.nombre}</strong><br>
+                                <span style="font-size: 0.85rem;">${predStatus} • ${user.puntos || 0} pts</span>
+                            </span>
                             <button onclick="deleteParticipant('${user.nombre}')">Eliminar</button>
                         </div>
                     `;
-                });
+                }
             } catch (e) { console.error(e); }
         }
 
@@ -364,12 +398,22 @@
         };
 
         window.deleteParticipant = async function(name) {
-            if (!confirm(`¿Eliminar a ${name}? Sus predicciones se mantendrán.`)) return;
+            if (!confirm(`⚠️ ¿ELIMINAR a ${name} COMPLETAMENTE? Se borrarán todas sus predicciones y datos.`)) return;
 
             const status = document.getElementById('participant-status');
             try {
-                await deleteDoc(doc(db, "usuarios", name));
-                status.innerHTML = `✅ ${name} ha sido eliminado.`;
+                const batch = writeBatch(db);
+
+                // 1. Eliminar participante
+                batch.delete(doc(db, "usuarios", name));
+
+                // 2. Eliminar todas sus predicciones
+                const qPreds = query(collection(db, "predicciones"), where("usuario", "==", name));
+                const snapPreds = await getDocs(qPreds);
+                snapPreds.forEach(d => batch.delete(d.ref));
+
+                await batch.commit();
+                status.innerHTML = `✅ ${name} y todas sus predicciones han sido eliminados.`;
                 status.style.color = 'var(--primary)';
                 setTimeout(() => {
                     status.innerHTML = '';
@@ -381,6 +425,141 @@
                 status.style.color = '#e74c3c';
             }
         };
+
+        const teamNameMapping = {
+            "Sudáfrica": "South Africa", "Corea del Sur": "South Korea", "República Checa": "Czech Republic",
+            "Canadá": "Canada", "Bosnia y Herzegovina": "Bosnia-Herzegovina", "Bosnia y Herz.": "Bosnia-Herzegovina",
+            "Estados Unidos": "USA", "Paraguay": "Paraguay", "Qatar": "Qatar", "Suiza": "Switzerland",
+            "Brasil": "Brazil", "Marruecos": "Morocco", "Haití": "Haiti", "Escocia": "Scotland",
+            "Australia": "Australia", "Turquía": "Turkey", "Alemania": "Germany", "Curazao": "Curaçao",
+            "Países Bajos": "Netherlands", "Japón": "Japan", "Costa de Marfil": "Ivory Coast",
+            "Ecuador": "Ecuador", "Suecia": "Sweden", "Túnez": "Tunisia", "España": "Spain",
+            "Cabo Verde": "Cape Verde", "Bélgica": "Belgium", "Egipto": "Egypt",
+            "Arabia Saudita": "Saudi Arabia", "Uruguay": "Uruguay", "Irán": "Iran",
+            "Nueva Zelanda": "New Zealand", "Francia": "France", "Senegal": "Senegal",
+            "Irak": "Iraq", "Noruega": "Norway", "Argentina": "Argentina", "Argelia": "Algeria",
+            "Austria": "Austria", "Jordania": "Jordan", "Portugal": "Portugal",
+            "RD Congo": "DR Congo", "Inglaterra": "England", "Croacia": "Croatia",
+            "Ghana": "Ghana", "Panamá": "Panama", "Uzbekistán": "Uzbekistan", "Colombia": "Colombia",
+            "México": "Mexico"
+        };
+
+        window.importDates = async function() {
+            const jsonInput = document.getElementById('json-dates').value.trim();
+            const statusDiv = document.getElementById('import-status');
+            const importBtn = document.getElementById('import-btn');
+
+            if (!jsonInput) {
+                statusDiv.className = 'import-status error';
+                statusDiv.innerHTML = '❌ Por favor pega el JSON primero.';
+                return;
+            }
+
+            try {
+                const dates = JSON.parse(jsonInput);
+                
+                if (!Array.isArray(dates)) {
+                    statusDiv.className = 'import-status error';
+                    statusDiv.innerHTML = '❌ El JSON debe ser un array.';
+                    return;
+                }
+
+                importBtn.disabled = true;
+                statusDiv.className = 'import-status success';
+                statusDiv.innerHTML = `⏳ Procesando ${dates.length} partidos...`;
+
+                // Cargar todos los partidos de una vez
+                const allMatches = await getDocs(collection(db, "partidos"));
+                const matchesMap = {};
+                
+                allMatches.forEach(doc => {
+                    const m = doc.data();
+                    matchesMap[`${m.local}|${m.visitante}`] = doc;
+                    matchesMap[`${m.visitante}|${m.local}`] = doc;
+                });
+
+                let updated = 0;
+                let errors = [];
+                const batch = writeBatch(db);
+
+                for (const entry of dates) {
+                    try {
+                        // Parsear los equipos del string "partido"
+                        const partes = entry.partido.split(' vs ');
+                        if (partes.length !== 2) {
+                            errors.push(`Formato inválido: "${entry.partido}"`);
+                            continue;
+                        }
+
+                        const teamName1 = partes[0].trim();
+                        const teamName2 = partes[1].trim();
+                        const team1 = teamNameMapping[teamName1] || teamName1;
+                        const team2 = teamNameMapping[teamName2] || teamName2;
+
+                        // Buscar en el mapa
+                        const key = `${team1}|${team2}`;
+                        const matchDoc = matchesMap[key];
+
+                        if (!matchDoc) {
+                            errors.push(`No encontrado: ${entry.partido}`);
+                            continue;
+                        }
+
+                        // Actualizar fecha
+                        const fechaUTC = construirFechaUTC(entry.fecha, entry.hora);
+                        batch.update(matchDoc.ref, { fecha: fechaUTC });
+                        updated++;
+
+                    } catch (e) {
+                        errors.push(`Error en "${entry.partido}": ${e.message}`);
+                    }
+                }
+
+                await batch.commit();
+
+                let mensaje = `✅ Se actualizaron ${updated} partidos.`;
+                if (errors.length > 0) {
+                    mensaje += `<br>⚠️ ${errors.length} errores: ${errors.slice(0, 3).join(', ')}${errors.length > 3 ? '...' : ''}`;
+                }
+
+                statusDiv.className = 'import-status success';
+                statusDiv.innerHTML = mensaje;
+                document.getElementById('json-dates').value = '';
+
+                setTimeout(() => {
+                    loadAdminMatches();
+                    importBtn.disabled = false;
+                }, 1500);
+
+            } catch (e) {
+                console.error(e);
+                statusDiv.className = 'import-status error';
+                statusDiv.innerHTML = `❌ Error al parsear JSON: ${e.message}`;
+                importBtn.disabled = false;
+            }
+        };
+
+        function construirFechaUTC(fechaStr, horaStr) {
+            // fechaStr: "2026-06-11", horaStr: "14:00"
+            // Colombia está en UTC-5
+            // Si en Colombia son las 14:00, en UTC son las 19:00 (14 + 5)
+            
+            const [año, mes, día] = fechaStr.split('-');
+            const [horas, minutos] = horaStr.split(':');
+            
+            // Calcular hora UTC
+            let horasUTC = parseInt(horas) + 5;
+            let díaUTC = parseInt(día);
+            
+            // Si superamos 24 horas, cambiar al día siguiente
+            if (horasUTC >= 24) {
+                horasUTC -= 24;
+                díaUTC += 1;
+            }
+            
+            // Crear timestamp en UTC usando Date.UTC()
+            return new Date(Date.UTC(año, parseInt(mes) - 1, díaUTC, horasUTC, parseInt(minutos), 0));
+        }
 
         loadAdminMatches();
         loadParticipants();
