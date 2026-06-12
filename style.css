@@ -168,6 +168,118 @@ body {
     font-size: 1rem;
 }
 
+.quick-predictions-panel {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(155, 89, 182, 0.25);
+    animation: fadeIn 0.3s ease-out;
+    text-align: left;
+}
+
+.quick-predictions-select {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: var(--dark-light);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+}
+
+.quick-predictions-summary {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin: 0 0 0.75rem;
+    min-height: 1rem;
+}
+
+.quick-predictions-official {
+    padding: 0.65rem 0.85rem;
+    margin-bottom: 0.75rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.quick-predictions-official.played {
+    background: rgba(231, 76, 60, 0.1);
+    border: 1px solid rgba(231, 76, 60, 0.35);
+}
+
+.quick-predictions-official.played strong {
+    color: #e74c3c;
+    font-weight: 800;
+    font-size: 1.05rem;
+    letter-spacing: 0.5px;
+}
+
+.quick-predictions-official.pending {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    font-size: 0.8rem;
+}
+
+.quick-predictions-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.quick-predictions-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.85rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    border: 1px solid var(--glass-border);
+    font-size: 0.85rem;
+}
+
+.quick-predictions-list li.no-prediction {
+    border-color: rgba(231, 76, 60, 0.25);
+    background: rgba(231, 76, 60, 0.06);
+}
+
+.quick-predictions-list .pred-user {
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.quick-predictions-list .pred-score {
+    font-weight: 800;
+    color: var(--primary);
+    white-space: nowrap;
+}
+
+.quick-predictions-list .pred-pts {
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.quick-predictions-list li.no-prediction .pred-score {
+    color: #e74c3c;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
 .profile-grid {
     display: flex;
     flex-direction: column;

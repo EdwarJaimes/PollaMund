@@ -65,6 +65,19 @@
         .settings-toggle small { color: var(--text-muted); font-size: 0.85rem; line-height: 1.4; }
         .settings-status { margin-top: 1rem; font-size: 0.8rem; min-height: 1rem; }
 
+        /* Predictions Viewer */
+        .predictions-zone { margin-top: 3rem; padding: 2rem; border: 1px solid rgba(155, 89, 182, 0.3); border-radius: 16px; background: rgba(155, 89, 182, 0.05); }
+        .predictions-zone h2 { color: #9b59b6; font-size: 1.2rem; margin-top: 0; }
+        .predictions-zone select { width: 100%; padding: 0.8rem 1rem; background: var(--dark); border: 1px solid var(--glass-border); border-radius: 8px; color: white; font-family: 'Outfit', sans-serif; font-size: 0.95rem; margin-bottom: 1rem; cursor: pointer; }
+        .predictions-summary { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem; min-height: 1.2rem; }
+        .predictions-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; max-height: 400px; overflow-y: auto; }
+        .predictions-list li { display: flex; justify-content: space-between; align-items: center; padding: 0.65rem 1rem; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid var(--glass-border); font-size: 0.9rem; gap: 1rem; }
+        .predictions-list li.no-prediction { border-color: rgba(231, 76, 60, 0.25); background: rgba(231, 76, 60, 0.06); }
+        .predictions-list .pred-user { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .predictions-list .pred-score { font-weight: 800; color: var(--primary); white-space: nowrap; }
+        .predictions-list li.no-prediction .pred-score { color: #e74c3c; font-weight: 600; font-size: 0.85rem; }
+        .predictions-list .pred-pts { font-weight: 600; color: var(--text-muted); font-size: 0.8rem; }
+
         @media (max-width: 600px) {
             body { padding: 1rem; }
             h1 { font-size: 1.5rem; }
@@ -93,6 +106,18 @@
                 </div>
             </label>
             <div id="settings-status" class="settings-status"></div>
+        </div>
+
+        <div class="predictions-zone" id="predictions-zone">
+            <h2>📋 Predicciones por Partido</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+                Selecciona un partido para ver el pronóstico de cada participante.
+            </p>
+            <select id="predictions-match-select" onchange="loadMatchPredictions()">
+                <option value="">— Selecciona un partido —</option>
+            </select>
+            <div id="predictions-summary" class="predictions-summary"></div>
+            <ul id="predictions-list" class="predictions-list"></ul>
         </div>
 
         <div id="admin-match-list">
@@ -155,12 +180,16 @@
             "Mexico": "mx", "South Africa": "za", "South Korea": "kr", "Czech Republic": "cz", "Canada": "ca", "Bosnia-Herzegovina": "ba", "USA": "us", "Paraguay": "py", "Qatar": "qa", "Switzerland": "ch", "Brazil": "br", "Morocco": "ma", "Haiti": "ht", "Scotland": "gb-sct", "Australia": "au", "Turkey": "tr", "Germany": "de", "Curaçao": "cw", "Netherlands": "nl", "Japan": "jp", "Ivory Coast": "ci", "Ecuador": "ec", "Sweden": "se", "Tunisia": "tn", "Spain": "es", "Cape Verde": "cv", "Belgium": "be", "Egypt": "eg", "Saudi Arabia": "sa", "Uruguay": "uy", "Iran": "ir", "New Zealand": "nz", "France": "fr", "Senegal": "sn", "Iraq": "iq", "Norway": "no", "Argentina": "ar", "Algeria": "dz", "Austria": "at", "Jordan": "jo", "Portugal": "pt", "DR Congo": "cd", "England": "gb-eng", "Croatia": "hr", "Ghana": "gh", "Panama": "pa", "Uzbekistan": "uz", "Colombia": "co"
         };
 
+        let matchesCache = [];
+
         async function loadAdminMatches() {
             const list = document.getElementById('admin-match-list');
             try {
                 const q = query(collection(db, "partidos"), orderBy("fecha", "asc"));
                 const snap = await getDocs(q);
                 list.innerHTML = '';
+                matchesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                populatePredictionsSelect();
                 
                 snap.forEach(docSnap => {
                     const m = docSnap.data();
@@ -201,12 +230,91 @@
                                 <button class="btn-process" style="background:${isBloqueado ? '#27ae60' : '#e67e22'}; color:white;" onclick="toggleBloqueo('${m.idEvent}', ${isBloqueado})" title="Cierra o abre las predicciones de los usuarios para este partido">
                                     ${isBloqueado ? '🔓 Abrir predicciones' : '🔒 Cerrar predicciones'}
                                 </button>
+                                <button class="btn-process" style="background:#9b59b6; color:white;" onclick="viewPredictionsForMatch('${m.idEvent}')">Ver Predicciones</button>
                             </div>
                         </div>
                     `;
                 });
             } catch (e) { console.error(e); }
         }
+
+        function populatePredictionsSelect() {
+            const select = document.getElementById('predictions-match-select');
+            const current = select.value;
+            select.innerHTML = '<option value="">— Selecciona un partido —</option>';
+            matchesCache.forEach(m => {
+                const date = m.fecha.toDate().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+                select.innerHTML += `<option value="${m.idEvent}">${m.local} vs ${m.visitante} (${date})</option>`;
+            });
+            if (current && matchesCache.some(m => m.idEvent === current)) {
+                select.value = current;
+            }
+        }
+
+        window.viewPredictionsForMatch = function(matchId) {
+            document.getElementById('predictions-match-select').value = matchId;
+            loadMatchPredictions();
+            document.getElementById('predictions-zone').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
+
+        window.loadMatchPredictions = async function() {
+            const matchId = document.getElementById('predictions-match-select').value;
+            const listEl = document.getElementById('predictions-list');
+            const summaryEl = document.getElementById('predictions-summary');
+
+            if (!matchId) {
+                listEl.innerHTML = '';
+                summaryEl.innerHTML = '';
+                return;
+            }
+
+            listEl.innerHTML = '<li style="justify-content:center; color: var(--text-muted);">Cargando...</li>';
+            summaryEl.innerHTML = '';
+
+            try {
+                const [predSnap, userSnap] = await Promise.all([
+                    getDocs(query(collection(db, "predicciones"), where("idPartido", "==", matchId))),
+                    getDocs(query(collection(db, "usuarios"), orderBy("nombre", "asc")))
+                ]);
+
+                const predsByUser = {};
+                predSnap.forEach(d => {
+                    const p = d.data();
+                    predsByUser[p.usuario] = p;
+                });
+
+                const match = matchesCache.find(m => m.idEvent === matchId);
+                const matchLabel = match ? `${match.local} vs ${match.visitante}` : matchId;
+
+                if (userSnap.empty) {
+                    listEl.innerHTML = '<li style="justify-content:center; color: var(--text-muted);">No hay participantes registrados.</li>';
+                    return;
+                }
+
+                let html = '';
+                let withPred = 0;
+
+                userSnap.forEach(d => {
+                    const user = d.data();
+                    const p = predsByUser[user.nombre];
+                    if (p) {
+                        withPred++;
+                        const pts = p.puntosGanados !== undefined
+                            ? `<span class="pred-pts">${p.puntosGanados} pts</span>`
+                            : '';
+                        html += `<li class="has-prediction"><span class="pred-user">${user.nombre}</span><span class="pred-score">${p.goles_local} - ${p.goles_visitante} ${pts}</span></li>`;
+                    } else {
+                        html += `<li class="no-prediction"><span class="pred-user">${user.nombre}</span><span class="pred-score">Sin predicción</span></li>`;
+                    }
+                });
+
+                listEl.innerHTML = html;
+                summaryEl.innerHTML = `<strong>${matchLabel}</strong> — ${withPred} de ${userSnap.size} participante${userSnap.size !== 1 ? 's' : ''} han pronosticado`;
+            } catch (e) {
+                console.error(e);
+                listEl.innerHTML = `<li style="justify-content:center; color: #e74c3c;">Error: ${e.message}</li>`;
+            }
+        };
 
         async function loadPredictionConfig() {
             try {

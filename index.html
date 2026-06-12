@@ -24,6 +24,10 @@
                 <button id="quick-view-btn" class="btn-secondary" onclick="toggleQuickLeaderboard()" style="width: 100%; border-color: var(--secondary); color: var(--secondary);">
                     Ver Tabla de Clasificación 📊
                 </button>
+
+                <button id="quick-predictions-btn" class="btn-secondary" onclick="toggleQuickPredictions()" style="width: 100%; margin-top: 0.75rem; border-color: #9b59b6; color: #9b59b6;">
+                    Ver Predicciones por Partido 📋
+                </button>
                 
                 <div id="quick-leaderboard" class="hidden" style="margin-top: 1rem; animation: fadeIn 0.3s ease-out; max-height: 400px; overflow-y: auto; border-radius: 16px; background: rgba(0,0,0,0.2);">
                     <table class="leaderboard-table" style="font-size: 0.9rem;">
@@ -38,6 +42,15 @@
                             <!-- Se cargará dinámicamente -->
                         </tbody>
                     </table>
+                </div>
+
+                <div id="quick-predictions" class="hidden quick-predictions-panel">
+                    <select id="quick-predictions-select" class="quick-predictions-select" onchange="loadPublicMatchPredictions()">
+                        <option value="">— Selecciona un partido —</option>
+                    </select>
+                    <p id="quick-predictions-summary" class="quick-predictions-summary"></p>
+                    <div id="quick-predictions-official" class="quick-predictions-official hidden"></div>
+                    <ul id="quick-predictions-list" class="quick-predictions-list"></ul>
                 </div>
             </div>
 
@@ -176,6 +189,7 @@
 
         let currentUser = null;
         let appConfig = { bloquearAlIniciar: false };
+        let publicMatchesCache = [];
 
         async function loadAppConfig() {
             try {
@@ -551,6 +565,8 @@
             const body = document.getElementById('quick-leaderboard-body');
             
             if (container.classList.contains('hidden')) {
+                document.getElementById('quick-predictions').classList.add('hidden');
+                resetQuickPredictionsBtn();
                 container.classList.remove('hidden');
                 btn.innerText = "Cerrar Tabla ✖";
                 btn.style.borderColor = "var(--text-muted)";
@@ -589,6 +605,136 @@
                 btn.innerText = "Ver Tabla de Clasificación 📊";
                 btn.style.borderColor = "var(--secondary)";
                 btn.style.color = "var(--secondary)";
+            }
+        };
+
+        function resetQuickPredictionsBtn() {
+            const btn = document.getElementById('quick-predictions-btn');
+            btn.innerText = "Ver Predicciones por Partido 📋";
+            btn.style.borderColor = "#9b59b6";
+            btn.style.color = "#9b59b6";
+        }
+
+        async function loadPublicMatchesSelect() {
+            try {
+                const snap = await getDocs(query(collection(db, "partidos"), orderBy("fecha", "asc")));
+                publicMatchesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                const select = document.getElementById('quick-predictions-select');
+                const current = select.value;
+                select.innerHTML = '<option value="">— Selecciona un partido —</option>';
+                publicMatchesCache.forEach(m => {
+                    const date = m.fecha.toDate().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+                    select.innerHTML += `<option value="${m.idEvent}">${translateTeam(m.local)} vs ${translateTeam(m.visitante)} (${date})</option>`;
+                });
+                if (current && publicMatchesCache.some(m => m.idEvent === current)) {
+                    select.value = current;
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        window.toggleQuickPredictions = async function() {
+            const container = document.getElementById('quick-predictions');
+            const btn = document.getElementById('quick-predictions-btn');
+
+            if (container.classList.contains('hidden')) {
+                document.getElementById('quick-leaderboard').classList.add('hidden');
+                const lbBtn = document.getElementById('quick-view-btn');
+                lbBtn.innerText = "Ver Tabla de Clasificación 📊";
+                lbBtn.style.borderColor = "var(--secondary)";
+                lbBtn.style.color = "var(--secondary)";
+
+                container.classList.remove('hidden');
+                btn.innerText = "Cerrar Predicciones ✖";
+                btn.style.borderColor = "var(--text-muted)";
+                btn.style.color = "var(--text-muted)";
+
+                await loadPublicMatchesSelect();
+                loadPublicMatchPredictions();
+            } else {
+                container.classList.add('hidden');
+                resetQuickPredictionsBtn();
+            }
+        };
+
+        window.loadPublicMatchPredictions = async function() {
+            const matchId = document.getElementById('quick-predictions-select').value;
+            const listEl = document.getElementById('quick-predictions-list');
+            const summaryEl = document.getElementById('quick-predictions-summary');
+            const officialEl = document.getElementById('quick-predictions-official');
+
+            if (!matchId) {
+                listEl.innerHTML = '';
+                summaryEl.innerHTML = '';
+                officialEl.classList.add('hidden');
+                officialEl.innerHTML = '';
+                return;
+            }
+
+            listEl.innerHTML = '<li style="justify-content:center; color: var(--text-muted);">Cargando...</li>';
+            summaryEl.innerHTML = '';
+            officialEl.classList.add('hidden');
+
+            try {
+                const [predSnap, userSnap, matchSnap] = await Promise.all([
+                    getDocs(query(collection(db, "predicciones"), where("idPartido", "==", matchId))),
+                    getDocs(query(collection(db, "usuarios"), orderBy("nombre", "asc"))),
+                    getDoc(doc(db, "partidos", matchId))
+                ]);
+
+                const predsByUser = {};
+                predSnap.forEach(d => {
+                    const p = d.data();
+                    predsByUser[p.usuario] = p;
+                });
+
+                const match = matchSnap.exists()
+                    ? { idEvent: matchId, ...matchSnap.data() }
+                    : publicMatchesCache.find(m => m.idEvent === matchId);
+                const matchLabel = match
+                    ? `${translateTeam(match.local)} vs ${translateTeam(match.visitante)}`
+                    : matchId;
+
+                if (match && match.procesado === true) {
+                    officialEl.classList.remove('hidden', 'pending');
+                    officialEl.classList.add('played');
+                    officialEl.innerHTML = `Resultado oficial: <strong>${match.goles_local} - ${match.goles_visitante}</strong> ⚽`;
+                } else {
+                    officialEl.classList.remove('hidden', 'played');
+                    officialEl.classList.add('pending');
+                    officialEl.innerHTML = 'Resultado oficial: pendiente';
+                }
+
+                if (userSnap.empty) {
+                    listEl.innerHTML = '<li style="justify-content:center; color: var(--text-muted);">No hay participantes.</li>';
+                    summaryEl.innerHTML = matchLabel;
+                    return;
+                }
+
+                let html = '';
+                let withPred = 0;
+                const showPts = match && match.procesado === true;
+
+                userSnap.forEach(d => {
+                    const user = d.data();
+                    const p = predsByUser[user.nombre];
+                    if (p) {
+                        withPred++;
+                        const pts = showPts && p.puntosGanados !== undefined
+                            ? ` <span class="pred-pts">(${p.puntosGanados} pts)</span>`
+                            : '';
+                        html += `<li><span class="pred-user">${user.nombre}</span><span class="pred-score">${p.goles_local} - ${p.goles_visitante}${pts}</span></li>`;
+                    } else {
+                        html += `<li class="no-prediction"><span class="pred-user">${user.nombre}</span><span class="pred-score">Sin predicción</span></li>`;
+                    }
+                });
+
+                listEl.innerHTML = html;
+                summaryEl.innerHTML = `${matchLabel} — ${withPred} de ${userSnap.size} han pronosticado`;
+            } catch (e) {
+                console.error(e);
+                listEl.innerHTML = `<li style="justify-content:center; color: #ef4444;">Error al cargar</li>`;
+                officialEl.classList.add('hidden');
             }
         };
 
