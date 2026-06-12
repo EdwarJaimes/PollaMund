@@ -55,6 +55,15 @@
         .import-status.success { background: rgba(46, 204, 113, 0.1); border: 1px solid rgba(46, 204, 113, 0.3); color: var(--primary); }
         .import-status.error { background: rgba(231, 76, 60, 0.1); border: 1px solid rgba(231, 76, 60, 0.3); color: #e74c3c; }
 
+        /* Settings Section */
+        .settings-zone { margin-top: 3rem; padding: 2rem; border: 1px solid rgba(241, 196, 15, 0.3); border-radius: 16px; background: rgba(241, 196, 15, 0.05); }
+        .settings-zone h2 { color: #f1c40f; font-size: 1.2rem; margin-top: 0; }
+        .settings-toggle { display: flex; align-items: flex-start; gap: 1rem; cursor: pointer; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px solid var(--glass-border); }
+        .settings-toggle input { width: 20px; height: 20px; margin-top: 2px; accent-color: #f1c40f; cursor: pointer; flex-shrink: 0; }
+        .settings-toggle span { font-weight: 600; display: block; margin-bottom: 0.25rem; }
+        .settings-toggle small { color: var(--text-muted); font-size: 0.85rem; line-height: 1.4; }
+        .settings-status { margin-top: 1rem; font-size: 0.8rem; min-height: 1rem; }
+
         @media (max-width: 600px) {
             body { padding: 1rem; }
             h1 { font-size: 1.5rem; }
@@ -73,6 +82,18 @@
         <h1>Administrador PollaMund</h1>
         <p style="text-align: center; margin-bottom: 2rem; color: var(--text-muted);">Ingresa los resultados oficiales para repartir puntos.</p>
         
+        <div class="settings-zone">
+            <h2>⚙️ Configuración de Predicciones</h2>
+            <label class="settings-toggle">
+                <input type="checkbox" id="bloquear-al-iniciar" onchange="savePredictionConfig()">
+                <div>
+                    <span>Cerrar predicciones al iniciar el partido</span>
+                    <small>Cuando está activo, los usuarios no podrán guardar ni modificar sus predicciones después de la hora de inicio programada. Puedes forzar el cierre manualmente en cada partido con el botón 🔒.</small>
+                </div>
+            </label>
+            <div id="settings-status" class="settings-status"></div>
+        </div>
+
         <div id="admin-match-list">
             <p style="text-align: center;">Cargando partidos...</p>
         </div>
@@ -143,12 +164,15 @@
                 snap.forEach(docSnap => {
                     const m = docSnap.data();
                     const isProcessed = m.procesado === true;
+                    const isBloqueado = m.bloqueado === true;
+                    const matchStarted = m.fecha.toDate() <= new Date();
                     
                     list.innerHTML += `
-                        <div class="match-card" id="card-${m.idEvent}">
+                        <div class="match-card" id="card-${m.idEvent}" style="${isBloqueado ? 'border-color: #e74c3c;' : ''}">
                             <div class="match-header">
                                 <span>ID: ${m.idEvent} - ${m.ronda}</span>
-                                <span>${m.fecha.toDate().toLocaleDateString()}</span>
+                                <span>${m.fecha.toDate().toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                                ${isBloqueado ? `<span style="color: #e74c3c; font-weight: 800;">🔒 PREDICCIONES CERRADAS</span>` : (matchStarted ? `<span style="color: #f1c40f; font-weight: 600;">En curso / finalizado</span>` : '')}
                             </div>
                             <div class="teams-row">
                                 <div class="team">
@@ -168,17 +192,61 @@
                             <div class="status-msg" id="msg-${m.idEvent}">
                                 ${isProcessed ? '<span class="status-processed">PARTIDO PROCESADO ✅</span>' : ''}
                             </div>
-                            <div class="admin-actions" id="actions-${m.idEvent}" style="display:flex; gap:10px; justify-content:center;">
+                            <div class="admin-actions" id="actions-${m.idEvent}" style="display:flex; gap:10px; justify-content:center; flex-wrap: wrap;">
                                 ${!isProcessed ? 
                                     `<button class="btn-process" onclick="processMatchResult('${m.idEvent}', false)">Procesar Puntos</button>` : 
                                     `<button class="btn-process" style="background:#34495e; color:white;" onclick="enableEdit('${m.idEvent}')">Editar Resultado</button>`
                                 }
+                                <button class="btn-process" style="background:${isBloqueado ? '#27ae60' : '#e67e22'}; color:white;" onclick="toggleBloqueo('${m.idEvent}', ${isBloqueado})" title="Cierra o abre las predicciones de los usuarios para este partido">
+                                    ${isBloqueado ? '🔓 Abrir predicciones' : '🔒 Cerrar predicciones'}
+                                </button>
                             </div>
                         </div>
                     `;
                 });
             } catch (e) { console.error(e); }
         }
+
+        async function loadPredictionConfig() {
+            try {
+                const snap = await getDoc(doc(db, "config", "polla"));
+                const config = snap.exists() ? snap.data() : {};
+                document.getElementById('bloquear-al-iniciar').checked = config.bloquearAlIniciar === true;
+            } catch (e) { console.error(e); }
+        }
+
+        window.savePredictionConfig = async function() {
+            const checkbox = document.getElementById('bloquear-al-iniciar');
+            const status = document.getElementById('settings-status');
+            try {
+                await setDoc(doc(db, "config", "polla"), {
+                    bloquearAlIniciar: checkbox.checked
+                }, { merge: true });
+                status.innerHTML = checkbox.checked
+                    ? '✅ Las predicciones se cerrarán automáticamente al iniciar cada partido.'
+                    : '✅ Cierre automático desactivado. Solo aplicará el bloqueo manual por partido.';
+                status.style.color = 'var(--primary)';
+                setTimeout(() => { status.innerHTML = ''; }, 3000);
+            } catch (e) {
+                console.error(e);
+                status.innerHTML = '❌ Error: ' + e.message;
+                status.style.color = '#e74c3c';
+            }
+        };
+
+        window.toggleBloqueo = async function(matchId, currentlyBlocked) {
+            const newState = !currentlyBlocked;
+            const action = newState ? 'cerrar' : 'abrir';
+            if (!confirm(`¿Deseas ${action} las predicciones de los usuarios para este partido?`)) return;
+
+            try {
+                await updateDoc(doc(db, "partidos", matchId), { bloqueado: newState });
+                loadAdminMatches();
+            } catch (e) {
+                console.error(e);
+                alert('Error al actualizar: ' + e.message);
+            }
+        };
 
         window.enableEdit = function(matchId) {
             document.getElementById(`real-local-${matchId}`).disabled = false;
@@ -561,6 +629,7 @@
             return new Date(Date.UTC(año, parseInt(mes) - 1, díaUTC, horasUTC, parseInt(minutos), 0));
         }
 
+        loadPredictionConfig();
         loadAdminMatches();
         loadParticipants();
     </script>

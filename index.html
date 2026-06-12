@@ -136,7 +136,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-        import { getFirestore, collection, query, where, getDocs, orderBy, doc, setDoc, serverTimestamp, limit } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+        import { getFirestore, collection, query, where, getDocs, orderBy, doc, setDoc, getDoc, serverTimestamp, limit } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBhREGVAE9ReZPWPfWdt30rAzjEGe_UrsM",
@@ -175,6 +175,29 @@
         };
 
         let currentUser = null;
+        let appConfig = { bloquearAlIniciar: false };
+
+        async function loadAppConfig() {
+            try {
+                const snap = await getDoc(doc(db, "config", "polla"));
+                if (snap.exists()) {
+                    appConfig = { ...appConfig, ...snap.data() };
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function isPredictionLocked(match) {
+            if (match.procesado === true) return true;
+            if (match.bloqueado === true) return true;
+            if (appConfig.bloquearAlIniciar && match.fecha.toDate() <= new Date()) return true;
+            return false;
+        }
+
+        function canEditPrediction(match, isSaved) {
+            if (isPredictionLocked(match)) return false;
+            if (appConfig.bloquearAlIniciar) return true;
+            return !isSaved;
+        }
 
         function translateTeam(name) {
             return teamTranslations[name] || name;
@@ -283,6 +306,8 @@
             matchList.innerHTML = '<p>Cargando partidos...</p>';
 
             try {
+                await loadAppConfig();
+
                 // Fetch ALL matches
                 const qMatches = query(collection(db, "partidos"), orderBy("fecha", "asc"));
                 const snapMatches = await getDocs(qMatches);
@@ -303,26 +328,29 @@
                     const date = match.fecha.toDate().toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
                     const isMatchPlayed = match.procesado === true;
+                    const isLocked = isPredictionLocked(match);
+                    const isSaved = pred.idPartido !== undefined;
+                    const canEdit = canEditPrediction(match, isSaved);
                     const scoreLocal = isMatchPlayed ? match.goles_local : (pred.goles_local !== undefined ? pred.goles_local : "-");
                     const scoreVisitante = isMatchPlayed ? match.goles_visitante : (pred.goles_visitante !== undefined ? pred.goles_visitante : "-");
-                    const isSaved = pred.idPartido !== undefined;
                     const saveBtnId = `btn-save-${match.idEvent}`;
+                    const lockedReason = isMatchPlayed ? '' : (match.bloqueado ? 'cerradas por el administrador' : (appConfig.bloquearAlIniciar && match.fecha.toDate() <= new Date() ? 'el partido ya inició' : ''));
 
                     matchList.innerHTML += `
                         <div class="match-card" data-id="${match.idEvent}" id="card-${match.idEvent}">
                             <div class="match-info">
                                 <span>${match.ronda}</span>
                                 <span>${date}</span>
-                                ${isMatchPlayed ? `<span style="color: #e74c3c; font-weight: 800; font-size: 0.75rem;">⚽ JUGADO</span>` : ''}
+                                ${isMatchPlayed ? `<span style="color: #e74c3c; font-weight: 800; font-size: 0.75rem;">⚽ JUGADO</span>` : (isLocked ? `<span style="color: #f1c40f; font-weight: 800; font-size: 0.75rem;">🔒 CERRADO</span>` : '')}
                             </div>
                             <div class="match-body">
                                 <div class="match-teams">
                                     <div class="team" data-team="local">
                                         <img src="${getFlagUrl(match.local)}" class="flag" onerror="this.src='Pollamundial_files/flag_nd.png'" alt="${match.local}">
                                         <span>${translateTeam(match.local)}</span>
-                                        <div class="stepper ${isSaved || isMatchPlayed ? 'locked' : ''}">
+                                        <div class="stepper ${!canEdit ? 'locked' : ''}">
                                             <span class="score-label" id="score-local-${match.idEvent}">${scoreLocal}</span>
-                                            ${!isSaved && !isMatchPlayed ? `
+                                            ${canEdit ? `
                                             <div class="stepper-btns">
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'local', -1)">-</button>
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'local', 1)">+</button>
@@ -335,9 +363,9 @@
                                     <div class="team" data-team="visitante">
                                         <img src="${getFlagUrl(match.visitante)}" class="flag" onerror="this.src='Pollamundial_files/flag_nd.png'" alt="${match.visitante}">
                                         <span>${translateTeam(match.visitante)}</span>
-                                        <div class="stepper ${isSaved || isMatchPlayed ? 'locked' : ''}">
+                                        <div class="stepper ${!canEdit ? 'locked' : ''}">
                                             <span class="score-label" id="score-visitante-${match.idEvent}">${scoreVisitante}</span>
-                                            ${!isSaved && !isMatchPlayed ? `
+                                            ${canEdit ? `
                                             <div class="stepper-btns">
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'visitante', -1)">-</button>
                                                 <button class="btn-step" onclick="changeScore('${match.idEvent}', 'visitante', 1)">+</button>
@@ -351,18 +379,22 @@
                                         <div style="color: #e74c3c; font-weight: 800; font-size: 0.8rem; letter-spacing: 1px;">
                                             RESULTADO OFICIAL ⚽
                                         </div>
-                                    ` : (!isSaved ? `
+                                    ` : (isLocked ? `
+                                        <div style="color: #f1c40f; font-weight: 800; font-size: 0.8rem; letter-spacing: 1px;">
+                                            ${isSaved ? 'PREDICCIÓN GUARDADA ✅' : 'SIN PREDICCIÓN'} — CERRADO${lockedReason ? ` (${lockedReason})` : ''}
+                                        </div>
+                                    ` : (canEdit ? `
                                         <button id="${saveBtnId}" class="btn-primary" 
                                             style="padding: 0.6rem 1.2rem; border-radius: 10px; font-size: 0.85rem; width: 100%;" 
-                                            onclick="saveIndividualPrediction('${match.idEvent}')"
+                                            onclick="saveIndividualPrediction('${match.idEvent}', ${isSaved})"
                                             ${scoreLocal === "-" ? 'disabled' : ''}>
-                                            Guardar Predicción
+                                            ${isSaved ? 'Actualizar Predicción' : 'Guardar Predicción'}
                                         </button>
                                     ` : `
                                         <div style="color: var(--primary); font-weight: 800; font-size: 0.8rem; letter-spacing: 1px;">
                                             PREDICCIÓN GUARDADA ✅
                                         </div>
-                                    `)}
+                                    `))}
                                 </div>
                             </div>
                         </div>
@@ -433,7 +465,7 @@
         }
 
         // Individual Save functionality
-        window.saveIndividualPrediction = async (matchId) => {
+        window.saveIndividualPrediction = async (matchId, isUpdate) => {
             const goalsLocalText = document.getElementById(`score-local-${matchId}`).innerText;
             const goalsAwayText = document.getElementById(`score-visitante-${matchId}`).innerText;
 
@@ -442,8 +474,19 @@
                 return;
             }
 
-            const confirmSave = confirm("¿Estás seguro? Una vez guardada, no podrás modificar esta predicción.");
-            if (!confirmSave) return;
+            const matchSnap = await getDoc(doc(db, "partidos", matchId));
+            if (matchSnap.exists() && isPredictionLocked(matchSnap.data())) {
+                alert("Las predicciones para este partido ya están cerradas.");
+                loadMatchesForUser(currentUser);
+                return;
+            }
+
+            const confirmMsg = isUpdate
+                ? "¿Guardar los cambios en tu predicción?"
+                : (appConfig.bloquearAlIniciar
+                    ? "¿Guardar esta predicción? Podrás modificarla hasta que inicie el partido."
+                    : "¿Estás seguro? Una vez guardada, no podrás modificar esta predicción.");
+            if (!confirm(confirmMsg)) return;
 
             const btn = document.getElementById(`btn-save-${matchId}`);
             btn.disabled = true;
@@ -459,13 +502,12 @@
                     fecha_apuesta: serverTimestamp()
                 });
 
-                // Update UI to locked state
                 loadMatchesForUser(currentUser);
             } catch (e) {
                 console.error(e);
                 alert("Error al guardar: " + e.message);
                 btn.disabled = false;
-                btn.innerText = "Guardar Predicción";
+                btn.innerText = isUpdate ? "Actualizar Predicción" : "Guardar Predicción";
             }
         };
 
