@@ -41,6 +41,7 @@
         .add-participant-form button:hover { transform: translateY(-2px); filter: brightness(1.1); }
         .participants-list { display: flex; flex-wrap: wrap; gap: 1rem; }
         .participant-badge { background: rgba(46, 204, 113, 0.15); border: 1px solid rgba(46, 204, 113, 0.3); padding: 1rem 1.2rem; border-radius: 8px; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+        .participant-badge.no-predictions { background: rgba(231, 76, 60, 0.15); border-color: rgba(231, 76, 60, 0.45); }
         .participant-badge button { background: #e74c3c; color: white; border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; white-space: nowrap; }
         .participant-badge button:hover { background: #c0392b; }
 
@@ -403,12 +404,13 @@
                     const snapPreds = await getDocs(qPreds);
                     const predCount = snapPreds.size;
                     
-                    const predStatus = predCount > 0 
+                    const hasPredictions = predCount > 0;
+                    const predStatus = hasPredictions
                         ? `<span style="color: var(--primary); font-weight: 600;">✓ ${predCount} predicción${predCount !== 1 ? 'es' : ''}</span>` 
-                        : `<span style="color: var(--text-muted);">○ Sin predicciones</span>`;
+                        : `<span style="color: #e74c3c; font-weight: 600;">○ Sin predicciones</span>`;
                     
                     list.innerHTML += `
-                        <div class="participant-badge">
+                        <div class="participant-badge${hasPredictions ? '' : ' no-predictions'}">
                             <span style="flex: 1;">
                                 <strong>${user.nombre}</strong><br>
                                 <span style="font-size: 0.85rem;">${predStatus} • ${user.puntos || 0} pts</span>
