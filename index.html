@@ -190,6 +190,7 @@
         let currentUser = null;
         let appConfig = { bloquearAlIniciar: false };
         let publicMatchesCache = [];
+        window.nextMatchToScroll = null;
 
         async function loadAppConfig() {
             try {
@@ -351,8 +352,19 @@
                 });
 
                 matchList.innerHTML = '';
+                
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                window.nextMatchToScroll = null;
+
                 snapMatches.forEach(docSnap => {
                     const match = docSnap.data();
+                    const matchDate = match.fecha.toDate();
+                    
+                    if (!window.nextMatchToScroll && matchDate >= today) {
+                        window.nextMatchToScroll = match.idEvent;
+                    }
+                    
                     const pred = predsMap[match.idEvent] || {};
                     const date = match.fecha.toDate().toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -469,7 +481,19 @@
                 navControls.classList.remove('hidden');
                 changeProfileBtn.classList.remove('hidden');
                 rulesBtn.classList.remove('hidden');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+                
+                if (window.nextMatchToScroll) {
+                    setTimeout(() => {
+                        const card = document.getElementById('card-' + window.nextMatchToScroll);
+                        if (card) {
+                            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        } else {
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }
+                    }, 100);
+                } else {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
             }
         };
 
@@ -754,11 +778,17 @@
             // Load matches
             await loadMatchesForUser(name);
 
-            // Siempre mostrar la tabla de clasificación al inicio
-            toggleView('leaderboard');
+            // Mostrar la vista de predicciones por defecto para ubicar el partido del día
+            toggleView('prediction');
 
             setTimeout(() => {
                 document.getElementById('profile-selection').style.display = 'none';
+                if (window.nextMatchToScroll) {
+                    const card = document.getElementById('card-' + window.nextMatchToScroll);
+                    if (card) {
+                        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
             }, 500);
         };
 
