@@ -649,7 +649,10 @@
                 select.innerHTML = '<option value="">— Selecciona un partido —</option>';
                 publicMatchesCache.forEach(m => {
                     const date = m.fecha.toDate().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-                    select.innerHTML += `<option value="${m.idEvent}">${translateTeam(m.local)} vs ${translateTeam(m.visitante)} (${date})</option>`;
+                    const isPlayed = m.procesado === true || m.fecha.toDate() <= new Date();
+                    const styleStr = isPlayed ? 'style="color: #2ecc71; font-weight: 600;"' : '';
+                    const iconStr = isPlayed ? ' ✅' : '';
+                    select.innerHTML += `<option value="${m.idEvent}" ${styleStr}>${translateTeam(m.local)} vs ${translateTeam(m.visitante)} (${date})${iconStr}</option>`;
                 });
                 if (current && publicMatchesCache.some(m => m.idEvent === current)) {
                     select.value = current;
