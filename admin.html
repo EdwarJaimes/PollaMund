@@ -366,6 +366,17 @@
             `;
         };
 
+        async function getRankings() {
+            const uSnap = await getDocs(query(collection(db, "usuarios"), orderBy("puntos", "desc")));
+            let rank = 1;
+            let rankings = {};
+            uSnap.forEach(doc => {
+                rankings[doc.data().nombre] = rank;
+                rank++;
+            });
+            return rankings;
+        }
+
         window.processMatchResult = async function(matchId, isCorrection) {
             const gLocal = document.getElementById(`real-local-${matchId}`).value;
             const gVisitante = document.getElementById(`real-visitante-${matchId}`).value;
@@ -381,6 +392,8 @@
 
             try {
                 msg.innerText = isCorrection ? "Recalculando puntos..." : "Procesando puntos...";
+                
+                const rankingsBefore = await getRankings();
                 
                 // 1. Buscar predicciones para este partido
                 const q = query(collection(db, "predicciones"), where("idPartido", "==", matchId));
@@ -428,6 +441,25 @@
                 });
 
                 await batch.commit();
+
+                // 3. Actualizar tendencias
+                msg.innerText = "Actualizando posiciones...";
+                const rankingsAfter = await getRankings();
+                
+                const rankBatch = writeBatch(db);
+                const allUsers = await getDocs(collection(db, "usuarios"));
+                allUsers.forEach(doc => {
+                    const name = doc.data().nombre;
+                    const oldRank = rankingsBefore[name] || 0;
+                    const newRank = rankingsAfter[name] || 0;
+                    
+                    if (oldRank !== 0 && newRank !== 0) {
+                        const rankDiff = oldRank - newRank; // positivo = subió
+                        rankBatch.update(doc.ref, { tendencia: rankDiff });
+                    }
+                });
+                await rankBatch.commit();
+
                 msg.innerHTML = `<span class="status-processed">¡ÉXITO! ${isCorrection ? 'Corrección aplicada' : 'Puntos procesados'}. ✅</span>`;
                 setTimeout(() => loadAdminMatches(), 1500);
 

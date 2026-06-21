@@ -515,10 +515,21 @@
                     if (rank === 2) rankIcon = '<span class="rank-2">🥈</span>';
                     if (rank === 3) rankIcon = '<span class="rank-3">🥉</span>';
 
+                    let tendenciaHtml = '';
+                    if (user.tendencia !== undefined && user.tendencia !== 0) {
+                        if (user.tendencia > 0) {
+                            tendenciaHtml = `<span style="float: right; color: #2ecc71; font-size: 0.85rem; font-weight: 800;">▲ ${user.tendencia}</span>`;
+                        } else {
+                            tendenciaHtml = `<span style="float: right; color: #e74c3c; font-size: 0.85rem; font-weight: 800;">▼ ${Math.abs(user.tendencia)}</span>`;
+                        }
+                    } else if (user.tendencia === 0) {
+                        tendenciaHtml = `<span style="float: right; color: var(--text-muted); font-size: 0.85rem; font-weight: 800;">-</span>`;
+                    }
+
                     body.innerHTML += `
                         <tr>
                             <td class="rank-col">${rankIcon}</td>
-                            <td class="name-col">${user.nombre}</td>
+                            <td class="name-col" style="text-align: left;">${user.nombre}${tendenciaHtml}</td>
                             <td class="points-col">${user.puntos || 0} pts</td>
                         </tr>
                     `;
@@ -611,10 +622,21 @@
                         if (rank === 2) rankIcon = '🥈';
                         if (rank === 3) rankIcon = '🥉';
                         
+                        let tendenciaHtml = '';
+                        if (user.tendencia !== undefined && user.tendencia !== 0) {
+                            if (user.tendencia > 0) {
+                                tendenciaHtml = `<span style="float: right; color: #2ecc71; font-size: 0.8rem; font-weight: 800;">▲ ${user.tendencia}</span>`;
+                            } else {
+                                tendenciaHtml = `<span style="float: right; color: #e74c3c; font-size: 0.8rem; font-weight: 800;">▼ ${Math.abs(user.tendencia)}</span>`;
+                            }
+                        } else if (user.tendencia === 0) {
+                            tendenciaHtml = `<span style="float: right; color: var(--text-muted); font-size: 0.8rem; font-weight: 800;">-</span>`;
+                        }
+                        
                         body.innerHTML += `
                             <tr>
                                 <td class="rank-col" style="padding: 0.8rem;">${rankIcon}</td>
-                                <td class="name-col" style="padding: 0.8rem; text-align: left;">${user.nombre}</td>
+                                <td class="name-col" style="padding: 0.8rem; text-align: left;">${user.nombre}${tendenciaHtml}</td>
                                 <td class="points-col" style="padding: 0.8rem;">${user.puntos || 0}</td>
                             </tr>
                         `;
