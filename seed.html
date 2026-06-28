@@ -160,7 +160,7 @@
 
                 try {
                     // Usamos setDoc con idEvent como ID del documento para evitar duplicados
-                    await setDoc(doc(db, "partidos", idEvent), {
+                    await setDoc(doc(db, "segundaFase", idEvent), {
                         idEvent,
                         fecha: Timestamp.fromDate(new Date(strTimestamp)),
                         ronda: Round,

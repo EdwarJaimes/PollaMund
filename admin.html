@@ -160,6 +160,17 @@
         </div>
     </div>
 
+    <!-- History Modal -->
+    <div id="history-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; padding: 1rem; box-sizing: border-box;">
+        <div style="background: var(--dark-light); border: 1px solid var(--glass-border); border-radius: 16px; padding: 2rem; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; position: relative;">
+            <button onclick="closeHistoryModal()" style="position: absolute; top: 1rem; right: 1rem; background: transparent; border: none; color: var(--text-muted); font-size: 2rem; cursor: pointer; line-height: 1;">&times;</button>
+            <h2 id="history-modal-title" style="margin-top: 0; color: var(--primary);">Historial de Predicciones</h2>
+            <div id="history-modal-content">
+                <p>Cargando...</p>
+            </div>
+        </div>
+    </div>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
         import { getFirestore, collection, query, getDocs, orderBy, doc, updateDoc, getDoc, where, writeBatch, increment, deleteDoc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
@@ -185,7 +196,7 @@
         async function loadAdminMatches() {
             const list = document.getElementById('admin-match-list');
             try {
-                const q = query(collection(db, "partidos"), orderBy("fecha", "asc"));
+                const q = query(collection(db, "segundaFase"), orderBy("fecha", "asc"));
                 const snap = await getDocs(q);
                 list.innerHTML = '';
                 matchesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -349,7 +360,7 @@
             if (!confirm(`¿Deseas ${action} las predicciones de los usuarios para este partido?`)) return;
 
             try {
-                await updateDoc(doc(db, "partidos", matchId), { bloqueado: newState });
+                await updateDoc(doc(db, "segundaFase", matchId), { bloqueado: newState });
                 loadAdminMatches();
             } catch (e) {
                 console.error(e);
@@ -434,7 +445,7 @@
                 }
 
                 // 2. Actualizar el partido
-                batch.update(doc(db, "partidos", matchId), {
+                batch.update(doc(db, "segundaFase", matchId), {
                     goles_local: resLocal,
                     goles_visitante: resVisitante,
                     procesado: true
@@ -498,7 +509,7 @@
 
                 // 3. Limpiar partidos
                 status.innerHTML = "Limpiando resultados de partidos...";
-                const matchSnap = await getDocs(collection(db, "partidos"));
+                const matchSnap = await getDocs(collection(db, "segundaFase"));
                 matchSnap.forEach(d => {
                     batch.update(d.ref, {
                         goles_local: null,
@@ -555,7 +566,10 @@
                                 <strong>${user.nombre}</strong><br>
                                 <span style="font-size: 0.85rem;">${predStatus} • ${user.puntos || 0} pts</span>
                             </span>
-                            <button onclick="deleteParticipant('${user.nombre}')">Eliminar</button>
+                            <div style="display: flex; gap: 0.5rem; flex-direction: column;">
+                                <button style="background: #3498db;" onclick="viewUserHistory('${user.nombre}')">Historial</button>
+                                <button onclick="deleteParticipant('${user.nombre}')">Eliminar</button>
+                            </div>
                         </div>
                     `;
                 }
@@ -636,6 +650,93 @@
             }
         };
 
+        window.closeHistoryModal = function() {
+            document.getElementById('history-modal').style.display = 'none';
+        };
+
+        window.viewUserHistory = async function(userName) {
+            const modal = document.getElementById('history-modal');
+            const title = document.getElementById('history-modal-title');
+            const content = document.getElementById('history-modal-content');
+            
+            title.textContent = `Historial de ${userName}`;
+            content.innerHTML = '<p style="text-align:center; color:var(--text-muted);">Cargando historial...</p>';
+            modal.style.display = 'flex';
+
+            try {
+                // Fetch predictions for user
+                const qPreds = query(collection(db, "predicciones"), where("usuario", "==", userName));
+                const snapPreds = await getDocs(qPreds);
+                
+                if (snapPreds.empty) {
+                    content.innerHTML = '<p style="text-align:center; color:var(--text-muted);">No hay predicciones para este usuario.</p>';
+                    return;
+                }
+
+                // Get all matches for reference
+                const matchesMap = {};
+                matchesCache.forEach(m => {
+                    matchesMap[m.idEvent] = m;
+                });
+
+                let historyHtml = '<ul class="predictions-list" style="margin-top: 1rem;">';
+                
+                const preds = [];
+                snapPreds.forEach(doc => preds.push(doc.data()));
+
+                // Sort predictions by match date (newest first)
+                preds.sort((a, b) => {
+                    const matchA = matchesMap[a.idPartido];
+                    const matchB = matchesMap[b.idPartido];
+                    if (!matchA || !matchB) return 0;
+                    return matchB.fecha.toDate() - matchA.fecha.toDate();
+                });
+
+                let totalPts = 0;
+
+                preds.forEach(p => {
+                    const match = matchesMap[p.idPartido];
+                    if (!match) return;
+                    
+                    const matchLabel = `${match.local} vs ${match.visitante}`;
+                    const pts = p.puntosGanados !== undefined ? p.puntosGanados : 0;
+                    totalPts += pts;
+                    
+                    const isProcessed = match.procesado === true;
+                    
+                    let resultHtml = '';
+                    if (isProcessed) {
+                        resultHtml = `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
+                            Resultado real: ${match.goles_local} - ${match.goles_visitante}
+                        </div>`;
+                    }
+                    
+                    historyHtml += `
+                        <li style="flex-direction: column; align-items: flex-start; gap: 0.5rem; padding: 1rem; border: 1px solid rgba(255,255,255,0.05);">
+                            <div style="display: flex; justify-content: space-between; width: 100%;">
+                                <strong style="color: var(--text);">${matchLabel}</strong>
+                                <span class="pred-pts" style="background: rgba(46, 204, 113, 0.1); padding: 0.2rem 0.6rem; border-radius: 4px; color: var(--primary); font-weight: 800;">${pts} pts</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                                <span style="font-size: 0.95rem;">Pronóstico: <b style="color: white;">${p.goles_local} - ${p.goles_visitante}</b></span>
+                                ${!isProcessed ? '<span style="font-size: 0.8rem; color: #f1c40f; padding: 0.1rem 0.4rem; border-radius: 4px; border: 1px solid rgba(241,196,15,0.3);">Pendiente</span>' : ''}
+                            </div>
+                            ${resultHtml}
+                        </li>
+                    `;
+                });
+                
+                historyHtml += '</ul>';
+                historyHtml += `<div style="margin-top: 1.5rem; text-align: right; font-weight: 800; font-size: 1.2rem; color: var(--primary); padding-top: 1rem; border-top: 1px solid var(--glass-border);">Total acumulado: ${totalPts} pts</div>`;
+                
+                content.innerHTML = historyHtml;
+                
+            } catch (e) {
+                console.error(e);
+                content.innerHTML = `<p style="color: #e74c3c; text-align: center;">Error: ${e.message}</p>`;
+            }
+        };
+
         const teamNameMapping = {
             "Sudáfrica": "South Africa", "Corea del Sur": "South Korea", "República Checa": "Czech Republic",
             "Canadá": "Canada", "Bosnia y Herzegovina": "Bosnia-Herzegovina", "Bosnia y Herz.": "Bosnia-Herzegovina",
@@ -679,7 +780,7 @@
                 statusDiv.innerHTML = `⏳ Procesando ${dates.length} partidos...`;
 
                 // Cargar todos los partidos de una vez
-                const allMatches = await getDocs(collection(db, "partidos"));
+                const allMatches = await getDocs(collection(db, "segundaFase"));
                 const matchesMap = {};
                 
                 allMatches.forEach(doc => {

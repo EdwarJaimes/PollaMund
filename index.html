@@ -339,7 +339,7 @@
                 await loadAppConfig();
 
                 // Fetch ALL matches
-                const qMatches = query(collection(db, "partidos"), orderBy("fecha", "asc"));
+                const qMatches = query(collection(db, "segundaFase"), orderBy("fecha", "asc"));
                 const snapMatches = await getDocs(qMatches);
 
                 // Fetch existing predictions for this user
@@ -548,7 +548,7 @@
                 return;
             }
 
-            const matchSnap = await getDoc(doc(db, "partidos", matchId));
+            const matchSnap = await getDoc(doc(db, "segundaFase", matchId));
             if (matchSnap.exists() && isPredictionLocked(matchSnap.data())) {
                 alert("Las predicciones para este partido ya están cerradas.");
                 loadMatchesForUser(currentUser);
@@ -663,7 +663,7 @@
 
         async function loadPublicMatchesSelect() {
             try {
-                const snap = await getDocs(query(collection(db, "partidos"), orderBy("fecha", "asc")));
+                const snap = await getDocs(query(collection(db, "segundaFase"), orderBy("fecha", "asc")));
                 publicMatchesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
                 const select = document.getElementById('quick-predictions-select');
@@ -728,7 +728,7 @@
                 const [predSnap, userSnap, matchSnap] = await Promise.all([
                     getDocs(query(collection(db, "predicciones"), where("idPartido", "==", matchId))),
                     getDocs(query(collection(db, "usuarios"), orderBy("nombre", "asc"))),
-                    getDoc(doc(db, "partidos", matchId))
+                    getDoc(doc(db, "segundaFase", matchId))
                 ]);
 
                 const predsByUser = {};
@@ -763,6 +763,7 @@
                 let html = '';
                 let withPred = 0;
                 const showPts = match && match.procesado === true;
+                const isLocked = match ? isPredictionLocked(match) : false;
 
                 userSnap.forEach(d => {
                     const user = d.data();
@@ -772,7 +773,12 @@
                         const pts = showPts && p.puntosGanados !== undefined
                             ? ` <span class="pred-pts">(${p.puntosGanados} pts)</span>`
                             : '';
-                        html += `<li><span class="pred-user">${user.nombre}</span><span class="pred-score">${p.goles_local} - ${p.goles_visitante}${pts}</span></li>`;
+                        
+                        if (!isLocked) {
+                            html += `<li><span class="pred-user">${user.nombre}</span><span class="pred-score" style="color: var(--text-muted); font-style: italic;">Pronóstico oculto 🔒</span></li>`;
+                        } else {
+                            html += `<li><span class="pred-user">${user.nombre}</span><span class="pred-score">${p.goles_local} - ${p.goles_visitante}${pts}</span></li>`;
+                        }
                     } else {
                         html += `<li class="no-prediction"><span class="pred-user">${user.nombre}</span><span class="pred-score">Sin predicción</span></li>`;
                     }
