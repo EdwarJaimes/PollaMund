@@ -210,7 +210,6 @@
 
         function canEditPrediction(match, isSaved) {
             if (isPredictionLocked(match)) return false;
-            if (appConfig.bloquearAlIniciar) return true;
             return !isSaved;
         }
 
@@ -555,11 +554,7 @@
                 return;
             }
 
-            const confirmMsg = isUpdate
-                ? "¿Guardar los cambios en tu predicción?"
-                : (appConfig.bloquearAlIniciar
-                    ? "¿Guardar esta predicción? Podrás modificarla hasta que inicie el partido."
-                    : "¿Estás seguro? Una vez guardada, no podrás modificar esta predicción.");
+            const confirmMsg = "¿Estás seguro? Una vez guardada, no podrás modificar esta predicción.";
             if (!confirm(confirmMsg)) return;
 
             const btn = document.getElementById(`btn-save-${matchId}`);
